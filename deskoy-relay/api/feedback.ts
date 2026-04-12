@@ -1,6 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { clampDiscordContent, postDiscordWebhook } from '../lib/discord';
-import { isValidEmail, MAX_DIAGNOSTICS_JSON_LEN, MAX_MESSAGE_LEN } from '../lib/limits';
+import {
+  isValidEmail,
+  MAX_DIAGNOSTICS_JSON_LEN,
+  MAX_MESSAGE_LEN,
+  normalizeRelayLicenseKey,
+} from '../lib/limits';
 
 function formatDiagnostics(d: unknown): string {
   if (d === undefined || d === null) return '';
@@ -36,6 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const message = String(body.message ?? '').trim();
   const email = String(body.email ?? '').trim();
   const diagnostics = body.diagnostics;
+  const licenseKey = normalizeRelayLicenseKey(body.licenseKey);
 
   if (!message) {
     res.status(400).json({ ok: false, error: 'missing_message' });
@@ -51,8 +57,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const diagBlock = formatDiagnostics(diagnostics);
+  const licenseLine = licenseKey
+    ? `**License:** \`${clampDiscordContent(licenseKey, 200)}\`\n`
+    : '**License:** *(none)*\n';
   const content =
     `**New Feedback**\n` +
+    licenseLine +
     (email ? `**Email:** ${email}\n` : '') +
     `\n${clampDiscordContent(message, 1800)}\n` +
     (diagBlock ? `\n**Diagnostics**\n\`\`\`json\n${clampDiscordContent(diagBlock, 1200)}\n\`\`\`\n` : '');

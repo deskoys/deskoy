@@ -6,6 +6,7 @@ import {
   MAX_MESSAGE_LEN,
   MAX_SCREENSHOT_BYTES,
   MAX_STEPS_LEN,
+  normalizeRelayLicenseKey,
 } from '../lib/limits';
 
 function formatDiagnostics(d: unknown): string {
@@ -44,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const steps = String(body.steps ?? '').trim();
   const screenshot = body.screenshot != null ? String(body.screenshot) : '';
   const diagnostics = body.diagnostics;
+  const licenseKey = normalizeRelayLicenseKey(body.licenseKey);
 
   if (!message) {
     res.status(400).json({ ok: false, error: 'missing_message' });
@@ -78,8 +80,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const diagBlock = formatDiagnostics(diagnostics);
+  const licenseLine = licenseKey
+    ? `**License:** \`${clampDiscordContent(licenseKey, 200)}\`\n`
+    : '**License:** *(none)*\n';
   const content =
     `**New Bug Report**\n` +
+    licenseLine +
     (email ? `**Email:** ${email}\n` : '') +
     `\n**What happened**\n${clampDiscordContent(message, 1600)}\n` +
     (steps ? `\n**Steps to reproduce**\n${clampDiscordContent(steps, 1200)}\n` : '') +

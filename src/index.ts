@@ -224,24 +224,20 @@ type LicenseValidity =
 // electron-store's exported types vary by version; keep runtime strong, typing flexible.
 const store = new Store() as any;
 
-function dayStampLocal(d = new Date()): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+const FEEDBACK_BUG_COOLDOWN_MS = 5 * 60 * 60 * 1000;
+
+function rateLimitTimestampKey(kind: 'feedback' | 'bug'): string {
+  return `rateLimit.${kind}.lastSentAt`;
 }
 
-function rateLimitKey(kind: 'feedback' | 'bug'): string {
-  return `rateLimit.${kind}.lastDay`;
+function canSendAfterCooldown(kind: 'feedback' | 'bug'): boolean {
+  const raw = store.get(rateLimitTimestampKey(kind));
+  const last = typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
+  return Date.now() - last >= FEEDBACK_BUG_COOLDOWN_MS;
 }
 
-function canSendToday(kind: 'feedback' | 'bug'): boolean {
-  const last = (store.get(rateLimitKey(kind), '') as string) || '';
-  return last !== dayStampLocal();
-}
-
-function markSentToday(kind: 'feedback' | 'bug') {
-  store.set(rateLimitKey(kind), dayStampLocal());
+function markSentRateLimit(kind: 'feedback' | 'bug') {
+  store.set(rateLimitTimestampKey(kind), Date.now());
 }
 
 function defaultSettings(): DeskoySettings {
@@ -309,6 +305,14 @@ function setSettings(patch: Partial<DeskoySettings>) {
 
 let licenseCache: { at: number; value: LicenseValidity } | null = null;
 const LICENSE_CACHE_TTL_MS = 15_000;
+
+/** Stored activation key for relay / Discord (truncated). Omitted when not activated. */
+function getStoredLicenseKeyForReport(): string | undefined {
+  const stored = store.get('license') as StoredLicense | undefined;
+  const k = typeof stored?.key === 'string' ? stored.key.trim() : '';
+  if (!k) return undefined;
+  return k.length > 256 ? k.slice(0, 256) : k;
+}
 
 async function getLicenseValidity(): Promise<LicenseValidity> {
   const cached = licenseCache;
@@ -1274,19 +1278,26 @@ function allowDirectDiscordWebhookFallback(): boolean {
 ipcMain.handle(
   'deskoy:sendFeedback',
   async (_evt, payload: { message: string; email?: string; diagnostics?: unknown }) => {
-    if (!canSendToday('feedback')) return { ok: false, error: 'rate_limited' };
+    if (!canSendAfterCooldown('feedback')) return { ok: false, error: 'rate_limited' };
     const message = (payload?.message ?? '').toString().trim();
     if (!message) return { ok: false, error: 'missing_message' };
     const email = (payload?.email ?? '').toString().trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'invalid_email' };
     const diagnostics = payload?.diagnostics;
+    const licenseKey = getStoredLicenseKeyForReport();
 
     const relayRes = await postDeskoyRelay({
       url: DESKOY_FEEDBACK_RELAY_URL,
-      body: { type: 'feedback', message, email: email || undefined, diagnostics },
+      body: {
+        type: 'feedback',
+        message,
+        email: email || undefined,
+        diagnostics,
+        licenseKey: licenseKey || undefined,
+      },
     });
     if (relayRes.ok) {
-      markSentToday('feedback');
+      markSentRateLimit('feedback');
       return relayRes;
     }
 
@@ -1297,6 +1308,7 @@ ipcMain.handle(
 
     const content =
       `**New Feedback**\n` +
+      (licenseKey ? `**License:** \`${licenseKey}\`\n` : '**License:** *(none)*\n') +
       (email ? `**Email:** ${email}\n` : '') +
       `\n${message}\n` +
       (diagnostics
@@ -1307,7 +1319,7 @@ ipcMain.handle(
       username: 'Deskoy Feedback',
       content,
     });
-    if (res.ok) markSentToday('feedback');
+    if (res.ok) markSentRateLimit('feedback');
     return res;
   },
 );
@@ -1318,13 +1330,14 @@ ipcMain.handle(
     _evt,
     payload: { message: string; email?: string; steps?: string; screenshot?: string; diagnostics?: unknown },
   ) => {
-    if (!canSendToday('bug')) return { ok: false, error: 'rate_limited' };
+    if (!canSendAfterCooldown('bug')) return { ok: false, error: 'rate_limited' };
     const message = (payload?.message ?? '').toString().trim();
     if (!message) return { ok: false, error: 'missing_message' };
     const email = (payload?.email ?? '').toString().trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'invalid_email' };
     const steps = (payload?.steps ?? '').toString().trim();
     const diagnostics = payload?.diagnostics;
+    const licenseKey = getStoredLicenseKeyForReport();
 
     const relayRes = await postDeskoyRelay({
       url: DESKOY_BUG_RELAY_URL,
@@ -1335,10 +1348,11 @@ ipcMain.handle(
         steps: steps || undefined,
         screenshot: payload?.screenshot || undefined,
         diagnostics,
+        licenseKey: licenseKey || undefined,
       },
     });
     if (relayRes.ok) {
-      markSentToday('bug');
+      markSentRateLimit('bug');
       return relayRes;
     }
 
@@ -1349,6 +1363,7 @@ ipcMain.handle(
 
     const content =
       `**New Bug Report**\n` +
+      (licenseKey ? `**License:** \`${licenseKey}\`\n` : '**License:** *(none)*\n') +
       (email ? `**Email:** ${email}\n` : '') +
       `\n**What happened**\n${message}\n` +
       (steps ? `\n**Steps to reproduce**\n${steps}\n` : '') +
@@ -1369,7 +1384,7 @@ ipcMain.handle(
           }
         : undefined,
     });
-    if (res.ok) markSentToday('bug');
+    if (res.ok) markSentRateLimit('bug');
     return res;
   },
 );

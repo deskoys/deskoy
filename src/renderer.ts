@@ -22,15 +22,15 @@ const btnClearLicense = el<HTMLButtonElement>('btnClearLicense');
 const licenseStatus = el<HTMLElement>('licenseStatus');
 
 /** Opens in the default browser (see `deskoy:openExternal` in main). */
-const LICENSE_PAGE_URL = 'https://deskoy.app/';
 const HELP_URL = 'https://www.deskoy.com/docs/support';
 const CHANGELOG_URL = 'https://www.deskoy.com/changelog';
 const LICENSING_DOCS_URL = 'https://www.deskoy.com/docs/licensing';
 /** Public uptime / incidents page for Deskoy online services. */
 const STATUS_PAGE_URL = 'https://www.deskoy.com/status';
+const TERMS_OF_SERVICE_URL = 'https://www.deskoy.com/terms';
 
 function renderLicenseMissingPrompt() {
-  licenseStatus.innerHTML = `Don&rsquo;t have a <a href="${LICENSE_PAGE_URL}" class="lic-link">License key</a>?`;
+  licenseStatus.innerHTML = `Don&rsquo;t have a <a href="${LICENSING_DOCS_URL}" class="lic-link">License key</a>?`;
 }
 
 document.body.addEventListener('click', (e) => {
@@ -41,6 +41,9 @@ document.body.addEventListener('click', (e) => {
   e.preventDefault();
   void window.deskoy.openExternal(href);
 });
+
+el<HTMLAnchorElement>('spFeedbackTermsLink').setAttribute('href', TERMS_OF_SERVICE_URL);
+el<HTMLAnchorElement>('spBugTermsLink').setAttribute('href', TERMS_OF_SERVICE_URL);
 
 function flashLicenseInputError() {
   licenseKey.classList.add('lic-input--error');
@@ -913,6 +916,8 @@ spFeedbackSend.addEventListener('click', async () => {
       setFormStatus(spFeedbackStatus, 'Sent! Thank you.', 'ok');
       spFeedbackText.value = '';
       spFeedbackEmail.value = '';
+    } else if (res.error === 'rate_limited') {
+      setFormStatus(spFeedbackStatus, 'You can send feedback again after five hours.', 'error');
     } else {
       setFormStatus(spFeedbackStatus, 'Failed to send. Try again.', 'error');
     }
@@ -982,6 +987,8 @@ spBugSend.addEventListener('click', async () => {
       spBugPreviewImg.src = '';
       spBugPreview.hidden = true;
       spBugAttachPrompt.style.display = '';
+    } else if (res.error === 'rate_limited') {
+      setFormStatus(spBugStatus, 'You can send another report after five hours.', 'error');
     } else {
       setFormStatus(spBugStatus, 'Failed to send. Try again later.', 'error');
     }

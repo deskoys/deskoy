@@ -1611,15 +1611,27 @@
     box-shadow: 0 0 0 3px rgba(255, 69, 58, 0.14);
   }
 
+  /* Footer: ToS + submit (single block so legal copy stays with the button, not below the fold) */
+  .sp-form-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 2px;
+    padding-top: 12px;
+    border-top: 0.5px solid rgba(255,255,255,0.06);
+  }
+  .sp-form-footer .sp-form-actions {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
+
   /* fixed-looking submit bar (inside card) */
   .sp-form-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 10px;
-    padding-top: 12px;
-    margin-top: 2px;
-    border-top: 0.5px solid rgba(255,255,255,0.06);
   }
   .sp-form-status {
     font-size: 12px;
@@ -1640,6 +1652,14 @@
   .sp-form-submit:hover { filter: brightness(1.08); }
   .sp-form-submit:active { transform: scale(0.97); }
   .sp-form-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .sp-form-disclaimer {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-tertiary);
+  }
+  .sp-form-disclaimer .lic-link { font-size: inherit; }
 
   /* Attach zone */
   .sp-attach-zone { margin-top: 2px; }
@@ -2411,7 +2431,7 @@
 
         <div class="sp-page" id="spPageFeedback" data-page="feedback">
           <div class="sp-page-title">Send Feedback</div>
-          <p class="sp-page-sub">Help us improve Deskoy. We read every message.</p>
+          <p class="sp-page-sub">Help us improve Deskoy. We read every message. One submission every five hours.</p>
           <div class="sp-form-page">
             <div class="sp-form">
               <div class="sp-field">
@@ -2425,9 +2445,15 @@
                 <textarea class="sp-textarea" id="spFeedbackText" placeholder="What’s working well? What feels confusing? What should we add next?" rows="7"></textarea>
               </div>
 
-              <div class="sp-form-actions">
-                <span class="sp-form-status" id="spFeedbackStatus"></span>
-                <button type="button" class="sp-form-submit" id="spFeedbackSend">Submit Feedback</button>
+              <div class="sp-form-footer">
+                <p class="sp-form-disclaimer">
+                  By sending us this feedback, you agree to the
+                  <a class="lic-link" id="spFeedbackTermsLink" href="#">Terms of Service</a>.
+                </p>
+                <div class="sp-form-actions">
+                  <span class="sp-form-status" id="spFeedbackStatus"></span>
+                  <button type="button" class="sp-form-submit" id="spFeedbackSend">Submit Feedback</button>
+                </div>
               </div>
             </div>
           </div>
@@ -2435,7 +2461,7 @@
 
         <div class="sp-page" id="spPageBug" data-page="bug">
           <div class="sp-page-title">Report a Bug</div>
-          <p class="sp-page-sub">Describe the issue and optionally attach a screenshot.</p>
+          <p class="sp-page-sub">Describe the issue and optionally attach a screenshot. One report every five hours.</p>
           <div class="sp-form-page">
             <div class="sp-form">
               <div class="sp-field">
@@ -2476,9 +2502,15 @@
                 <span>Include diagnostics (version + basic settings)</span>
               </label>
 
-              <div class="sp-form-actions">
-                <span class="sp-form-status" id="spBugStatus"></span>
-                <button type="button" class="sp-form-submit" id="spBugSend">Send Report</button>
+              <div class="sp-form-footer">
+                <p class="sp-form-disclaimer">
+                  By sending us this bug report, you agree to the
+                  <a class="lic-link" id="spBugTermsLink" href="#">Terms of Service</a>.
+                </p>
+                <div class="sp-form-actions">
+                  <span class="sp-form-status" id="spBugStatus"></span>
+                  <button type="button" class="sp-form-submit" id="spBugSend">Send Report</button>
+                </div>
               </div>
             </div>
           </div>
