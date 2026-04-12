@@ -1,22 +1,9 @@
-import { contextBridge, ipcRenderer, shell } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
-async function openExternalSafe(url: string): Promise<{ ok: boolean }> {
-  const trimmed = (url ?? '').trim();
-  if (!trimmed) return { ok: false };
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return { ok: false };
-    await shell.openExternal(parsed.toString());
-    return { ok: true };
-  } catch {
-    return { ok: false };
-  }
-}
+type CoverKind = 'excel' | 'vscode' | 'docs' | 'jira' | 'bi' | 'black';
+type CoverMode = CoverKind | 'url' | 'file';
 
-export type CoverKind = 'excel' | 'vscode' | 'docs' | 'jira' | 'bi' | 'black';
-export type CoverMode = CoverKind | 'url' | 'file';
-
-export type DeskoySettings = {
+type DeskoySettings = {
   hotkey: string;
   coverMode: CoverMode;
   cover: CoverKind;
@@ -32,18 +19,13 @@ export type DeskoySettings = {
   theme: 'dark' | 'light' | 'system';
 };
 
-export type LicenseState =
-  | { status: 'missing' }
-  | { status: 'valid'; key: string; lastValidated: number }
-  | { status: 'invalid'; reason?: string };
-
-export type FeedbackPayload = {
+type FeedbackPayload = {
   message: string;
   email?: string;
   diagnostics?: unknown;
 };
 
-export type BugReportPayload = {
+type BugReportPayload = {
   message: string;
   email?: string;
   steps?: string;
@@ -52,7 +34,7 @@ export type BugReportPayload = {
 };
 
 contextBridge.exposeInMainWorld('deskoy', {
-  openExternal: (url: string) => openExternalSafe(url),
+  openExternal: (url: string) => ipcRenderer.invoke('deskoy:openExternal', url) as Promise<{ ok: boolean }>,
   getAppVersion: () =>
     ipcRenderer.invoke('deskoy:getAppVersion') as Promise<{ version: string; name: string }>,
   getState: () => ipcRenderer.invoke('deskoy:getState'),

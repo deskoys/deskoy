@@ -7,8 +7,9 @@ import {
   globalShortcut,
   ipcMain,
   nativeImage,
+  shell,
 } from 'electron';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 import { execFile } from 'child_process';
@@ -23,6 +24,9 @@ declare const COVER_VSCODE_WEBPACK_ENTRY: string;
 declare const COVER_DOCS_WEBPACK_ENTRY: string;
 declare const COVER_JIRA_WEBPACK_ENTRY: string;
 declare const COVER_BI_WEBPACK_ENTRY: string;
+/** Injected at `npm run make` / `package` from env (see webpack.plugins.ts). */
+declare const __DESKOY_BUILD_FEEDBACK_WEBHOOK__: string;
+declare const __DESKOY_BUILD_BUG_WEBHOOK__: string;
 
 /** Hardcoded until a server-side license API exists. Only this key is accepted (dev + packaged). */
 const BUILTIN_LICENSE_KEY = '2345r';
@@ -31,22 +35,29 @@ function isBuiltinLicenseKey(key: string): boolean {
   return key.trim() === BUILTIN_LICENSE_KEY;
 }
 
-// Load local env files (developer convenience).
-// Supports `.env.local` (preferred) and `.env` at repo root.
-// This runs in the main process before we read `process.env` below.
+// Load `.env` / `.env.local` before reading Discord webhook env vars.
+// Packaged apps are often started with cwd = System32 or the install folder; include userData,
+// resources, and the folder containing the .exe so webhooks still resolve after NSIS install.
 try {
-  // In forge+webpack, `__dirname` points at `.webpack/main`, not the repo root.
-  // Prefer `process.cwd()` for local development.
-  const roots = [
+  const roots: string[] = [];
+  try {
+    if (app.isPackaged) {
+      roots.push(app.getPath('userData'));
+      if (process.resourcesPath) roots.push(process.resourcesPath);
+      roots.push(path.dirname(process.execPath));
+    }
+  } catch {
+    // ignore
+  }
+  roots.push(
     process.cwd(),
     path.resolve(__dirname, '..'),
     path.resolve(__dirname, '..', '..'),
-  ];
+  );
   for (const root of roots) {
     const pLocal = path.join(root, '.env.local');
     const pEnv = path.join(root, '.env');
     if (existsSync(pLocal)) {
-      // `.env.local` should win over any inherited process env (common during debugging).
       dotenv.config({ path: pLocal, override: true });
       break;
     }
@@ -59,28 +70,106 @@ try {
   // ignore
 }
 
-// Discord webhooks (OPTIONAL, for development/ops only).
-//
-// Hardcoding webhooks in the app is NOT safe (they can be extracted from packaged builds).
-// For production, prefer a server-side relay endpoint you control.
-//
-// If set, the main process will deliver submissions directly to Discord:
-// - DESKOY_DISCORD_FEEDBACK_WEBHOOK_URL (or DESKOY_FEEDBACK_WEBHOOK_URL)
-// - DESKOY_DISCORD_BUG_WEBHOOK_URL (or DESKOY_BUG_WEBHOOK_URL)
-const DISCORD_FEEDBACK_WEBHOOK_URL =
-  process.env.DESKOY_DISCORD_FEEDBACK_WEBHOOK_URL ?? process.env.DESKOY_FEEDBACK_WEBHOOK_URL ?? '';
-const DISCORD_BUG_WEBHOOK_URL =
-  process.env.DESKOY_DISCORD_BUG_WEBHOOK_URL ?? process.env.DESKOY_BUG_WEBHOOK_URL ?? '';
+// Discord webhooks — resolved lazily (env after dotenv, optional JSON file, then build-time constants).
+// Env vars: DESKOY_DISCORD_FEEDBACK_WEBHOOK_URL or DESKOY_FEEDBACK_WEBHOOK_URL (and *_BUG_*).
+// File: deskoy-webhooks.json with { "feedback": "https://discord.com/api/webhooks/...", "bug": "..." }
+// in userData, resources, exe directory, or repo cwd (see readDeskoyWebhooksJson).
+let discordFeedbackWebhookResolved = '';
+let discordBugWebhookResolved = '';
+let discordWebhooksResolved = false;
 
-// Default production relay endpoints (no secrets in client).
-const DESKOY_FEEDBACK_RELAY_URL = 'https://deskoy.app/api/feedback';
-const DESKOY_BUG_RELAY_URL = 'https://deskoy.app/api/bug-report';
+function readDeskoyWebhooksJson(): { feedback: string; bug: string } {
+  const dirs: string[] = [];
+  try {
+    if (app.isPackaged) {
+      dirs.push(app.getPath('userData'));
+      if (process.resourcesPath) dirs.push(process.resourcesPath);
+      dirs.push(path.dirname(process.execPath));
+    }
+  } catch {
+    // ignore
+  }
+  dirs.push(
+    process.cwd(),
+    path.resolve(__dirname, '..'),
+    path.resolve(__dirname, '..', '..'),
+  );
+  const seen = new Set<string>();
+  for (const dir of dirs) {
+    const p = path.join(dir, 'deskoy-webhooks.json');
+    if (seen.has(p)) continue;
+    seen.add(p);
+    try {
+      if (!existsSync(p)) continue;
+      const j = JSON.parse(readFileSync(p, 'utf8')) as { feedback?: unknown; bug?: unknown };
+      return {
+        feedback: String(j.feedback ?? '').trim(),
+        bug: String(j.bug ?? '').trim(),
+      };
+    } catch {
+      // try next location
+    }
+  }
+  return { feedback: '', bug: '' };
+}
+
+function resolveDiscordWebhooks(): void {
+  if (discordWebhooksResolved) return;
+  discordWebhooksResolved = true;
+
+  const envFeedback =
+    process.env.DESKOY_DISCORD_FEEDBACK_WEBHOOK_URL?.trim() ||
+    process.env.DESKOY_FEEDBACK_WEBHOOK_URL?.trim() ||
+    '';
+  const envBug =
+    process.env.DESKOY_DISCORD_BUG_WEBHOOK_URL?.trim() ||
+    process.env.DESKOY_BUG_WEBHOOK_URL?.trim() ||
+    '';
+
+  const file = readDeskoyWebhooksJson();
+
+  const buildFeedback =
+    typeof __DESKOY_BUILD_FEEDBACK_WEBHOOK__ === 'string' ? __DESKOY_BUILD_FEEDBACK_WEBHOOK__.trim() : '';
+  const buildBug = typeof __DESKOY_BUILD_BUG_WEBHOOK__ === 'string' ? __DESKOY_BUILD_BUG_WEBHOOK__.trim() : '';
+
+  discordFeedbackWebhookResolved = envFeedback || file.feedback || buildFeedback;
+  discordBugWebhookResolved = envBug || file.bug || buildBug;
+}
+
+function getDiscordFeedbackWebhook(): string {
+  resolveDiscordWebhooks();
+  return discordFeedbackWebhookResolved;
+}
+
+function getDiscordBugWebhook(): string {
+  resolveDiscordWebhooks();
+  return discordBugWebhookResolved;
+}
+
+// Production relay (server holds Discord webhook secrets). Default: api subdomain on deskoy.com.
+// Override with DESKOY_FEEDBACK_RELAY_URL / DESKOY_BUG_RELAY_URL for staging or custom hosts.
+const DESKOY_FEEDBACK_RELAY_URL =
+  process.env.DESKOY_FEEDBACK_RELAY_URL?.trim() || 'https://api.deskoy.com/api/feedback';
+const DESKOY_BUG_RELAY_URL =
+  process.env.DESKOY_BUG_RELAY_URL?.trim() || 'https://api.deskoy.com/api/bug-report';
 
 // NSIS installer only (no Squirrel Update.exe). Avoid electron-squirrel-startup: it calls app.quit()
 // on Squirrel argv and spawns ..\Update.exe, which breaks or no-ops on NSIS installs.
 
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.deskoy.app');
+}
+
+// Prevent multiple Deskoy instances from being launched (e.g. from repeated taskbar/desktop clicks).
+// If a second instance is attempted, focus the existing settings window instead.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // `forceShowSettingsWindow` will create/restore/focus the settings window.
+    forceShowSettingsWindow();
+  });
 }
 
 /** Written by NSIS on true fresh installs — see build/installer.nsh */
@@ -100,13 +189,14 @@ type CoverKind = 'excel' | 'vscode' | 'docs' | 'jira' | 'bi' | 'black';
 type CoverMode = CoverKind | 'url' | 'file';
 
 type DeskoySettings = {
+  /** Electron globalShortcut accelerator; empty until the user sets one (default for new installs). */
   hotkey: string;
   coverMode: CoverMode;
   cover: CoverKind;
   coverUrl: string;
   coverFilePath: string;
   whitelist: string[];
-  /** Windows: mute default playback when cover opens; restore when it closes. */
+  /** Windows: mute default playback when cover opens; restore when it closes. Manual hotkey only — not used for auto-protect (blocked) covers. */
   audioMute: boolean;
   /** When true, the global hotkey toggles the cover. When false, the hotkey does nothing. */
   enabled: boolean;
@@ -156,7 +246,7 @@ function markSentToday(kind: 'feedback' | 'bug') {
 
 function defaultSettings(): DeskoySettings {
   return {
-    hotkey: 'Ctrl+Shift+D',
+    hotkey: '',
     coverMode: 'excel',
     cover: 'excel',
     coverUrl: '',
@@ -200,6 +290,7 @@ function getSettings(): DeskoySettings {
     enabled: rest.enabled ?? false,
     useCustomCover,
     audioMute: typeof rest.audioMute === 'boolean' ? rest.audioMute : d.audioMute,
+    hotkey: typeof rest.hotkey === 'string' ? rest.hotkey : d.hotkey,
   };
 }
 
@@ -246,6 +337,8 @@ async function getLicenseValidity(): Promise<LicenseValidity> {
 }
 
 let tray: Tray | null = null;
+/** When true, the settings window may close for real (tray Quit / app.quit). Otherwise close only hides. */
+let isQuitting = false;
 let settingsWindow: BrowserWindow | null = null;
 let coverWindow: BrowserWindow | null = null;
 /** True while the decoy cover window is visible (independent of `settings.enabled`). */
@@ -254,7 +347,7 @@ let coverBusy = false;
 let coverSession:
   | null
   | {
-      reason: 'manual' | 'meeting' | 'blocked' | 'presentation';
+      reason: 'manual' | 'blocked';
       trigger?: { hwnd: number; pid: number; processName: string; title: string };
       at: number;
       cleanupAttempted?: boolean;
@@ -319,7 +412,8 @@ function createSettingsWindow(show = true) {
     height: 600,
     minWidth: 900,
     minHeight: 600,
-    show,
+    // Always start hidden: showing only in `ready-to-show` avoids an empty frame while the bundle paints.
+    show: false,
     frame: false,
     titleBarStyle: 'hidden',
     title: 'Deskoy',
@@ -327,6 +421,7 @@ function createSettingsWindow(show = true) {
     backgroundColor: '#111113',
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      backgroundThrottling: false,
     },
   });
 
@@ -336,10 +431,12 @@ function createSettingsWindow(show = true) {
     if (show) {
       settingsWindow?.show();
       settingsWindow?.focus();
+      if (process.platform === 'win32') settingsWindow?.moveTop();
     }
   });
 
   settingsWindow.on('close', (e) => {
+    if (isQuitting) return;
     e.preventDefault();
     settingsWindow?.hide();
   });
@@ -694,7 +791,9 @@ async function openCoverIfAllowed(
     // within ~300ms, invisible to anyone watching.
     await Promise.all([
       openCoverFromSettings(s),
-      onCoverOpenAudio(s.audioMute),
+      // Never mute system audio during auto-protect: volume key / endpoint changes can steal focus
+      // or confuse foreground detection so auto-protect retriggers or glitches. Mute is manual hotkey only.
+      onCoverOpenAudio(false),
       hasHwnd && triggerInfo ? closeBlockedWindow(triggerInfo) : Promise.resolve(),
     ]);
   } finally {
@@ -786,8 +885,10 @@ async function registerHotkeys(settings: DeskoySettings): Promise<boolean> {
   if (!settings.enabled) return true;
   const lic = await getLicenseValidity();
   if (lic.status !== 'valid') return true;
-  const ok = globalShortcut.register(settings.hotkey, () => void toggleCoverViaHotkey());
-  if (ok) registeredHotkey = settings.hotkey;
+  const combo = (settings.hotkey ?? '').trim();
+  if (!combo) return true;
+  const ok = globalShortcut.register(combo, () => void toggleCoverViaHotkey());
+  if (ok) registeredHotkey = combo;
   return ok;
 }
 
@@ -961,18 +1062,15 @@ app.on('ready', () => {
   void (async () => {
     const freshInstall = await consumeFreshInstallMarker();
     if (freshInstall) {
-      // Built-in key: skip manual entry so the app is usable immediately after setup.
-      store.set('license', {
-        key: BUILTIN_LICENSE_KEY,
-        lastValidated: Date.now(),
-      });
+      // NSIS drops this marker only on a true new install — wipe local store so no dev/repack
+      // machine state or stale userData leaks in; user enters license on first run.
+      store.clear();
       licenseCache = null;
     }
     const lic = await getLicenseValidity();
     const shouldShowOnLaunch = freshInstall || lic.status !== 'valid';
     createSettingsWindow(shouldShowOnLaunch);
     if (shouldShowOnLaunch) {
-      setTimeout(() => forceShowSettingsWindow(), 450);
       if (getSettings().enabled) {
         setSettings({ enabled: false });
         sendState();
@@ -992,8 +1090,41 @@ app.on('activate', () => {
   createSettingsWindow(true);
 });
 
+app.on('before-quit', () => {
+  isQuitting = true;
+  stopAutoCoverWatcher();
+  clearBlockedCoverPollTimer();
+  if (registeredHotkey) {
+    globalShortcut.unregister(registeredHotkey);
+    registeredHotkey = null;
+  }
+  closeCover();
+  void onCoverCloseAudio();
+  if (tray) {
+    try {
+      tray.destroy();
+    } catch {
+      /* ignore */
+    }
+    tray = null;
+  }
+});
+
 app.on('will-quit', () => {
   if (registeredHotkey) globalShortcut.unregister(registeredHotkey);
+});
+
+ipcMain.handle('deskoy:openExternal', async (_evt, url: unknown) => {
+  const trimmed = typeof url === 'string' ? url.trim() : '';
+  if (!trimmed) return { ok: false as const };
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return { ok: false as const };
+    await shell.openExternal(parsed.toString());
+    return { ok: true as const };
+  } catch {
+    return { ok: false as const };
+  }
 });
 
 ipcMain.handle('deskoy:getAppVersion', async () => ({
@@ -1121,7 +1252,10 @@ async function postDeskoyRelay(args: {
   try {
     const resp = await fetch(args.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'DeskoyDesktop/1 (Electron)',
+      },
       body: JSON.stringify(args.body),
     });
     if (!resp.ok) return { ok: false, error: `relay_http_${resp.status}` };
@@ -1129,6 +1263,12 @@ async function postDeskoyRelay(args: {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'network_error' };
   }
+}
+
+/** Packaged builds use the relay only unless DESKOY_ALLOW_DIRECT_WEBHOOK_FALLBACK=1. Unpackaged dev may fall back to env webhooks. */
+function allowDirectDiscordWebhookFallback(): boolean {
+  if (!app.isPackaged) return true;
+  return process.env.DESKOY_ALLOW_DIRECT_WEBHOOK_FALLBACK === '1';
 }
 
 ipcMain.handle(
@@ -1140,28 +1280,32 @@ ipcMain.handle(
     const email = (payload?.email ?? '').toString().trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'invalid_email' };
     const diagnostics = payload?.diagnostics;
-    const hasDiscord = Boolean(normalizeWebhookUrl(DISCORD_FEEDBACK_WEBHOOK_URL));
-    if (hasDiscord) {
-      const content =
-        `**New Feedback**\n` +
-        (email ? `**Email:** ${email}\n` : '') +
-        `\n${message}\n` +
-        (diagnostics
-          ? `\n**Diagnostics**\n\`\`\`json\n${JSON.stringify(diagnostics, null, 2)}\n\`\`\`\n`
-          : '');
-      const res = await postDiscordWebhook({
-        webhookUrl: DISCORD_FEEDBACK_WEBHOOK_URL,
-        username: 'Deskoy Feedback',
-        content,
-      });
-      if (res.ok) markSentToday('feedback');
-      return res;
-    }
 
-    // Production-safe default: relay to server endpoint (no secrets embedded in client).
-    const res = await postDeskoyRelay({
+    const relayRes = await postDeskoyRelay({
       url: DESKOY_FEEDBACK_RELAY_URL,
       body: { type: 'feedback', message, email: email || undefined, diagnostics },
+    });
+    if (relayRes.ok) {
+      markSentToday('feedback');
+      return relayRes;
+    }
+
+    if (!allowDirectDiscordWebhookFallback()) return relayRes;
+
+    const feedbackWebhook = getDiscordFeedbackWebhook();
+    if (!normalizeWebhookUrl(feedbackWebhook)) return relayRes;
+
+    const content =
+      `**New Feedback**\n` +
+      (email ? `**Email:** ${email}\n` : '') +
+      `\n${message}\n` +
+      (diagnostics
+        ? `\n**Diagnostics**\n\`\`\`json\n${JSON.stringify(diagnostics, null, 2)}\n\`\`\`\n`
+        : '');
+    const res = await postDiscordWebhook({
+      webhookUrl: feedbackWebhook,
+      username: 'Deskoy Feedback',
+      content,
     });
     if (res.ok) markSentToday('feedback');
     return res;
@@ -1181,36 +1325,8 @@ ipcMain.handle(
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'invalid_email' };
     const steps = (payload?.steps ?? '').toString().trim();
     const diagnostics = payload?.diagnostics;
-    const hasDiscord = Boolean(normalizeWebhookUrl(DISCORD_BUG_WEBHOOK_URL));
-    if (hasDiscord) {
-      const content =
-        `**New Bug Report**\n` +
-        (email ? `**Email:** ${email}\n` : '') +
-        `\n**What happened**\n${message}\n` +
-        (steps ? `\n**Steps to reproduce**\n${steps}\n` : '') +
-        (diagnostics
-          ? `\n**Diagnostics**\n\`\`\`json\n${JSON.stringify(diagnostics, null, 2)}\n\`\`\`\n`
-          : '');
 
-      const file = payload?.screenshot ? decodeDataUrlImage(payload.screenshot) : null;
-      const res = await postDiscordWebhook({
-        webhookUrl: DISCORD_BUG_WEBHOOK_URL,
-        username: 'Deskoy Bug Report',
-        content,
-        file: file
-          ? {
-              filename: 'screenshot.png',
-              mime: file.mime,
-              buffer: file.buffer,
-            }
-          : undefined,
-      });
-      if (res.ok) markSentToday('bug');
-      return res;
-    }
-
-    // Production-safe default: relay to server endpoint (no secrets embedded in client).
-    const res = await postDeskoyRelay({
+    const relayRes = await postDeskoyRelay({
       url: DESKOY_BUG_RELAY_URL,
       body: {
         type: 'bug',
@@ -1220,6 +1336,38 @@ ipcMain.handle(
         screenshot: payload?.screenshot || undefined,
         diagnostics,
       },
+    });
+    if (relayRes.ok) {
+      markSentToday('bug');
+      return relayRes;
+    }
+
+    if (!allowDirectDiscordWebhookFallback()) return relayRes;
+
+    const bugWebhook = getDiscordBugWebhook();
+    if (!normalizeWebhookUrl(bugWebhook)) return relayRes;
+
+    const content =
+      `**New Bug Report**\n` +
+      (email ? `**Email:** ${email}\n` : '') +
+      `\n**What happened**\n${message}\n` +
+      (steps ? `\n**Steps to reproduce**\n${steps}\n` : '') +
+      (diagnostics
+        ? `\n**Diagnostics**\n\`\`\`json\n${JSON.stringify(diagnostics, null, 2)}\n\`\`\`\n`
+        : '');
+
+    const file = payload?.screenshot ? decodeDataUrlImage(payload.screenshot) : null;
+    const res = await postDiscordWebhook({
+      webhookUrl: bugWebhook,
+      username: 'Deskoy Bug Report',
+      content,
+      file: file
+        ? {
+            filename: 'screenshot.png',
+            mime: file.mime,
+            buffer: file.buffer,
+          }
+        : undefined,
     });
     if (res.ok) markSentToday('bug');
     return res;

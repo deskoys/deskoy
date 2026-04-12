@@ -23,19 +23,23 @@ const licenseStatus = el<HTMLElement>('licenseStatus');
 
 /** Opens in the default browser (see `deskoy:openExternal` in main). */
 const LICENSE_PAGE_URL = 'https://deskoy.app/';
-const HELP_URL = 'https://deskoy.app/help';
-const CHANGELOG_URL = 'https://deskoy.app/changelog';
+const HELP_URL = 'https://www.deskoy.com/docs/support';
+const CHANGELOG_URL = 'https://www.deskoy.com/changelog';
+const LICENSING_DOCS_URL = 'https://www.deskoy.com/docs/licensing';
+/** Public uptime / incidents page for Deskoy online services. */
+const STATUS_PAGE_URL = 'https://www.deskoy.com/status';
 
 function renderLicenseMissingPrompt() {
   licenseStatus.innerHTML = `Don&rsquo;t have a <a href="${LICENSE_PAGE_URL}" class="lic-link">License key</a>?`;
 }
 
-licenseStatus.addEventListener('click', (e) => {
+document.body.addEventListener('click', (e) => {
   const a = (e.target as HTMLElement).closest('a.lic-link');
-  if (!a || !licenseStatus.contains(a)) return;
-  e.preventDefault();
+  if (!a) return;
   const href = a.getAttribute('href');
-  if (href) void window.deskoy.openExternal(href);
+  if (!href) return;
+  e.preventDefault();
+  void window.deskoy.openExternal(href);
 });
 
 function flashLicenseInputError() {
@@ -81,7 +85,6 @@ const toggleMuteAudio = el<HTMLButtonElement>('toggleMuteAudio');
 const toggleUseCustom = el<HTMLButtonElement>('toggleUseCustom');
 const toggleAutoBlocked = el<HTMLButtonElement>('toggleAutoBlocked');
 const blockedKeywords = el<HTMLTextAreaElement>('blockedKeywords');
-const blockedKeywordsHint = el<HTMLElement>('blockedKeywordsHint');
 // Active window debug panel removed from UI.
 const customSourcePanel = el<HTMLElement>('customSourcePanel');
 const blockedPanel = el<HTMLElement>('blockedPanel');
@@ -116,17 +119,11 @@ const spGeneralStatusSub = el<HTMLElement>('spGeneralStatusSub');
 const spGeneralStatusPill = el<HTMLElement>('spGeneralStatusPill');
 const spGeneralHotkey = el<HTMLElement>('spGeneralHotkey');
 const spGeneralVersion = el<HTMLElement>('spGeneralVersion');
+const spGeneralArmBtn = el<HTMLButtonElement>('spGeneralArmBtn');
 const spGoHotkey = el<HTMLButtonElement>('spGoHotkey');
-const spQuickToggle = el<HTMLButtonElement>('spQuickToggle');
-const spQuickSave = el<HTMLButtonElement>('spQuickSave');
-const spQuickLicense = el<HTMLButtonElement>('spQuickLicense');
-const spQuickHelp = el<HTMLButtonElement>('spQuickHelp');
-const spQuickChangelog = el<HTMLButtonElement>('spQuickChangelog');
-const spLicenseHelp = el<HTMLButtonElement>('spLicenseHelp');
-const spLicenseChangelog = el<HTMLButtonElement>('spLicenseChangelog');
+const spLicenseLicensing = el<HTMLButtonElement>('spLicenseLicensing');
 
 const spFeedbackEmail = el<HTMLInputElement>('spFeedbackEmail');
-const spFeedbackDiag = el<HTMLInputElement>('spFeedbackDiag');
 const spFeedbackText = el<HTMLTextAreaElement>('spFeedbackText');
 const spFeedbackSend = el<HTMLButtonElement>('spFeedbackSend');
 const spFeedbackStatus = el<HTMLElement>('spFeedbackStatus');
@@ -143,6 +140,8 @@ const spBugPreviewImg = el<HTMLImageElement>('spBugPreviewImg');
 const spBugRemoveImg = el<HTMLButtonElement>('spBugRemoveImg');
 const spChangelog = el<HTMLButtonElement>('spChangelog');
 const spHelp = el<HTMLButtonElement>('spHelp');
+const spAboutStatus = el<HTMLButtonElement>('spAboutStatus');
+const spStatusPageGeneral = el<HTMLButtonElement>('spStatusPageGeneral');
 const spAppVersion = el<HTMLElement>('spAppVersion');
 
 const statusTimers = new WeakMap<HTMLElement, number>();
@@ -157,7 +156,7 @@ let deskoyArmed = false;
 let useCustomCover = false;
 let customSourceMode: 'url' | 'file' = 'url';
 let recordingHotkey = false;
-let currentHotkey = 'Ctrl+Shift+D';
+let currentHotkey = '';
 let autoBlockedOn = false;
 let blockedTitleKeywords: string[] = [];
 
@@ -208,8 +207,9 @@ const coverOptions: Record<
 };
 
 function hotkeyHintIdleText(): string {
-  // Hotkey editing is always allowed; arming only affects whether the hotkey is active globally.
-  return deskoyArmed ? 'Click to change' : 'Toggle Deskoy first';
+  if (!deskoyArmed) return 'Toggle Deskoy first';
+  if (!currentHotkey.trim()) return 'Click to set a hotkey';
+  return 'Click to change';
 }
 
 function setActiveState(active: boolean) {
@@ -260,7 +260,7 @@ function normalizeTypedHotkey(raw: string): string {
     .split('+')
     .map((p) => p.trim())
     .filter(Boolean);
-  if (parts.length === 0) return 'Ctrl+Shift+D';
+  if (parts.length === 0) return '';
   const mapped = parts.map((part) => {
     const lower = part.toLowerCase();
     if (lower === 'control' || lower === 'ctrl') return 'Ctrl';
@@ -278,6 +278,13 @@ function renderHotkeyBadges(value: string, placeholder = false) {
     const badge = document.createElement('span');
     badge.className = 'key';
     badge.textContent = '…';
+    hotkeyBadges.appendChild(badge);
+    return;
+  }
+  if (!value.trim()) {
+    const badge = document.createElement('span');
+    badge.className = 'key key--unset';
+    badge.textContent = 'Not set';
     hotkeyBadges.appendChild(badge);
     return;
   }
@@ -440,7 +447,7 @@ async function refresh() {
 
   setActiveState(state.active);
   setMaximizedUi(Boolean(state.maximized));
-  currentHotkey = settings.hotkey || 'Ctrl+Shift+D';
+  currentHotkey = typeof settings.hotkey === 'string' ? settings.hotkey : '';
   renderHotkeyBadges(currentHotkey);
   coverUrl.value = settings.coverUrl ?? '';
   coverFilePath.value = settings.coverFilePath ?? '';
@@ -760,7 +767,7 @@ btnChangelog.addEventListener('click', () => {
 });
 
 /* ── Settings side panel ──────────────────────────── */
-// Feedback/bug reports are delivered via Discord webhooks from main.
+// Feedback/bug reports: main process → API relay → Discord (see deskoy-relay/ in this repo).
 
 function openSettingsPanel() {
   spPanel.classList.remove('closing');
@@ -836,8 +843,7 @@ spManageLicense.addEventListener('click', () => {
   closeSettingsPanel();
   setTimeout(() => licenseOverlay.classList.add('show'), 280);
 });
-spLicenseHelp.addEventListener('click', () => void window.deskoy.openExternal(HELP_URL));
-spLicenseChangelog.addEventListener('click', () => void window.deskoy.openExternal(CHANGELOG_URL));
+spLicenseLicensing.addEventListener('click', () => void window.deskoy.openExternal(LICENSING_DOCS_URL));
 
 /* Theme switching */
 function resolveTheme(pref: 'dark' | 'light' | 'system'): 'dark' | 'light' {
@@ -895,16 +901,13 @@ spFeedbackSend.addEventListener('click', async () => {
   if (!text) { setFormStatus(spFeedbackStatus, 'Please enter your feedback.', 'error'); return; }
   spFeedbackSend.disabled = true;
   try {
-    const includeDiagnostics = spFeedbackDiag.checked;
     const email = spFeedbackEmail.value.trim();
     if (email && !isValidEmail(email)) {
       flashInputError(spFeedbackEmail);
       setFormStatus(spFeedbackStatus, 'Please enter a valid email address.', 'error');
       return;
     }
-    const diagnostics = includeDiagnostics
-      ? { version: appVersion.textContent || null, theme: currentTheme, armed: deskoyArmed }
-      : undefined;
+    const diagnostics = { version: appVersion.textContent || null, theme: currentTheme, armed: deskoyArmed };
     const res = await window.deskoy.sendFeedback({ message: text, email: email || undefined, diagnostics });
     if (res.ok) {
       setFormStatus(spFeedbackStatus, 'Sent! Thank you.', 'ok');
@@ -997,6 +1000,12 @@ spHelp.addEventListener('click', () => {
   void window.deskoy.openExternal(HELP_URL);
 });
 
+function openDeskoyStatusPage() {
+  void window.deskoy.openExternal(STATUS_PAGE_URL);
+}
+spAboutStatus.addEventListener('click', openDeskoyStatusPage);
+spStatusPageGeneral.addEventListener('click', openDeskoyStatusPage);
+
 type SettingsPage = 'general' | 'appearance' | 'license' | 'feedback' | 'bug' | 'about';
 
 function setSettingsPage(page: SettingsPage) {
@@ -1046,21 +1055,19 @@ bindNav(spNavAbout, 'about');
 
 function refreshGeneralPanel() {
   spGeneralVersion.textContent = appVersion.textContent || '—';
-  spGeneralHotkey.textContent = currentHotkey || '—';
+  spGeneralHotkey.textContent = currentHotkey.trim() ? currentHotkey : 'Not set';
 
   const on = deskoyArmed;
-  spGeneralStatusText.textContent = on ? 'Active' : 'Inactive';
+  spGeneralStatusText.textContent = on ? 'Active' : 'Paused';
   spGeneralStatusSub.textContent = on
-    ? 'Deskoy is armed and the hotkey is listening.'
-    : 'Deskoy is off. Turn it on to enable protection.';
+    ? 'Hotkey is registered—press it anytime to show your cover.'
+    : 'Paused: hotkey is unregistered until you resume.';
   spGeneralStatusPill.classList.toggle('on', on);
+  spGeneralArmBtn.textContent = on ? 'Pause Deskoy' : 'Resume Deskoy';
+  spGeneralArmBtn.classList.toggle('on', on);
 }
 
-spQuickToggle.addEventListener('click', () => btnToggle.click());
-spQuickSave.addEventListener('click', () => btnSave.click());
-spQuickHelp.addEventListener('click', () => void window.deskoy.openExternal(HELP_URL));
-spQuickChangelog.addEventListener('click', () => void window.deskoy.openExternal(CHANGELOG_URL));
-spQuickLicense.addEventListener('click', () => setSettingsPage('license'));
+spGeneralArmBtn.addEventListener('click', () => btnToggle.click());
 
 spGoHotkey.addEventListener('click', () => {
   closeSettingsPanel();

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/index.ts",
+    "src/renderer.ts",
+    "src/preload.ts",
+    "src/cover/cover.ts",
+    "forge.config.ts",
+    "scripts/build-icons.cjs",
+    "scripts/build-install-gif.cjs",
+    "scripts/build-installer-assets.cjs"
+  ],
+  "project": ["src/**/*.ts", "*.ts", "scripts/**/*.cjs"],
+  "ignoreBinaries": ["electron", "electron-forge"],
+  "ignoreDependencies": [
+    "electron",
+    "webpack",
+    "@electron-forge/shared-types",
+    "@felixrieseberg/electron-forge-maker-nsis",
+    "@vercel/webpack-asset-relocator-loader",
+    "css-loader",
+    "file-loader",
+    "node-loader",
+    "style-loader",
+    "ts-loader"
+  ],
+  "ignoreIssues": {
+    "forge.config.ts": ["exports"]
+  }
+}

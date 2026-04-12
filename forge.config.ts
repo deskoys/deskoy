@@ -6,6 +6,7 @@ import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-nati
 import { WebpackPlugin } from '@electron-forge/plugin-webpack';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import fs from 'fs';
 import path from 'path';
 
 import { mainConfig } from './webpack.main.config';
@@ -16,12 +17,18 @@ const assetsIco = path.join(__dirname, 'assets', 'icon.ico');
 const assetsPng = path.join(__dirname, 'assets', 'icon.png');
 const nsisSidebarBmp = path.join(__dirname, 'assets', 'installer-sidebar.bmp');
 const nsisHeaderBmp = path.join(__dirname, 'assets', 'installer-header.bmp');
+const deskoyWebhooksJson = path.join(__dirname, 'deskoy-webhooks.json');
+
+const packagerExtraResources = [assetsIco, assetsPng];
+if (fs.existsSync(deskoyWebhooksJson)) {
+  packagerExtraResources.push(deskoyWebhooksJson);
+}
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     icon: assetsIcon,
-    extraResource: [assetsIco, assetsPng],
+    extraResource: packagerExtraResources,
   },
   rebuildConfig: {},
   makers: [

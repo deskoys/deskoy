@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/feedback.ts": { "memory": 256, "maxDuration": 30 },
+    "api/bug-report.ts": { "memory": 512, "maxDuration": 30 }
+  }
+}
