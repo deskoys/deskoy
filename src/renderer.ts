@@ -1052,7 +1052,7 @@ async function refreshUpdatesPanel() {
     updatesDownloadUrl = downloadUrl || updatesDownloadUrl;
     if (!visible) {
       spUpdatesEmpty.textContent =
-        'You’re up to date. We’ll post updates here when a new version is available.';
+        'You’re up to date. New versions of Deskoy will appear here.';
       spUpdatesEmpty.removeAttribute('hidden');
       spUpdatesCard.toggleAttribute('hidden', true);
       return;

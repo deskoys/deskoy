@@ -876,7 +876,7 @@ async function isBlockedWindowGoneOrMinimized(trgHwnd: number, trgPid: number): 
   const psCheck = `
 $hwnd = [IntPtr]::new(${trgHwnd})
 $sig = '[DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p);'
-$t = Add-Type -MemberDefinition $sig -Name 'WinCheck${trgHwnd}' -Namespace W -PassThru -ErrorAction SilentlyContinue
+$t = Add-Type -MemberDefinition $sig -Name 'WinCheck' -Namespace W -PassThru -ErrorAction SilentlyContinue
 if (-not $t::IsWindow($hwnd)) { Write-Output "gone"; exit 0 }
 $p = 0
 [void]$t::GetWindowThreadProcessId($hwnd, [ref]$p)
@@ -888,7 +888,7 @@ Write-Output "alive"
     execFile(
       'powershell.exe',
       ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCheck],
-      { windowsHide: true, timeout: 600, maxBuffer: 1024 * 8 },
+      { windowsHide: true, timeout: 1500, maxBuffer: 1024 * 8 },
       (_err, stdout) => {
         const state = String(stdout ?? '').trim();
         resolve(state === 'gone' || state === 'min');
@@ -945,8 +945,16 @@ async function openCoverIfAllowed(
     // Cover appears immediately (feels instant to the user).
     // Blocked window close/minimize races alongside — it disappears under the cover
     // within ~300ms, invisible to anyone watching.
+    // Auto Protect must *never* use custom URL/file covers; always use the built-in decoy cover.
+    const autoProtectSettings: DeskoySettings = {
+      ...s,
+      useCustomCover: false,
+      coverMode: s.cover,
+      coverUrl: '',
+      coverFilePath: '',
+    };
     await Promise.all([
-      openCoverFromSettings(s),
+      openCoverFromSettings(autoProtectSettings),
       // Never mute system audio during auto-protect: volume key / endpoint changes can steal focus
       // or confuse foreground detection so auto-protect retriggers or glitches. Mute is manual hotkey only.
       onCoverOpenAudio(false),
@@ -963,9 +971,17 @@ async function openCoverIfAllowed(
     const trgPid = triggerInfo.pid;
     // Stagger the first check slightly — window needs a moment after SendMessage returns.
     let pollActive = false;
+    const MAX_BLOCKED_COVER_MS = 4500;
+    const startedAt = Date.now();
     blockedCoverPollTimer = setInterval(() => {
       if (!coverOpen || coverSession?.reason !== 'blocked') {
         clearBlockedCoverPollTimer();
+        return;
+      }
+      // Fail-safe: if we can't reliably observe the HWND state, never leave the cover stuck.
+      if (Date.now() - startedAt > MAX_BLOCKED_COVER_MS) {
+        clearBlockedCoverPollTimer();
+        void closeCoverSession();
         return;
       }
       // Skip tick if previous check hasn't returned yet (PowerShell is slower than 150ms sometimes).
