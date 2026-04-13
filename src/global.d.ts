@@ -69,10 +69,8 @@ declare global {
         diagnostics?: unknown;
       }) => Promise<{ ok: boolean; error?: string }>;
       windowMinimize: () => Promise<{ ok: boolean }>;
-      windowToggleMaximize: () => Promise<{ ok: boolean; isMaximized: boolean }>;
       windowClose: () => Promise<{ ok: boolean }>;
       onStateChanged: (cb: (state: { active: boolean }) => void) => () => void;
-      onWindowMaximizedChanged: (cb: (state: { maximized: boolean }) => void) => () => void;
       onCoverFallback: (cb: (info: { reason: string }) => void) => () => void;
       onUpgradeRequired: (cb: (payload: { message: string; downloadUrl: string; minimumVersion?: string }) => void) => () => void;
     };

@@ -535,8 +535,9 @@ function createSettingsWindow(show = true) {
   settingsWindow = new BrowserWindow({
     width: 900,
     height: 600,
-    minWidth: 900,
-    minHeight: 600,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
     // Always start hidden: showing only in `ready-to-show` avoids an empty frame while the bundle paints.
     show: false,
     frame: false,
@@ -551,6 +552,9 @@ function createSettingsWindow(show = true) {
   });
 
   settingsWindow.setMenuBarVisibility(false);
+  // Hard lock size even if the OS tries to resize/maximize.
+  settingsWindow.setMinimumSize(900, 600);
+  settingsWindow.setMaximumSize(900, 600);
   void settingsWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
   settingsWindow.once('ready-to-show', () => {
     if (show) {
@@ -1305,8 +1309,14 @@ ipcMain.handle('deskoy:getAppVersion', async () => ({
 }));
 
 const UPDATES_API_URL = process.env.DESKOY_UPDATES_URL?.trim() || 'https://api.deskoy.com/api/updates';
+const UPDATES_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+let updatesCache: { at: number; value: unknown } | null = null;
 ipcMain.handle('deskoy:getUpdates', async () => {
   try {
+    const cached = updatesCache;
+    if (cached && Date.now() - cached.at < UPDATES_CACHE_TTL_MS) {
+      return { ok: true as const, data: cached.value };
+    }
     const resp = await fetch(UPDATES_API_URL, {
       method: 'GET',
       headers: { 'User-Agent': 'DeskoyDesktop/1 (Electron)' },
@@ -1314,6 +1324,7 @@ ipcMain.handle('deskoy:getUpdates', async () => {
     if (!resp.ok) return { ok: false as const, error: `updates_http_${resp.status}` };
     const data = (await resp.json()) as unknown;
     if (!data || typeof data !== 'object') return { ok: false as const, error: 'updates_bad_payload' };
+    updatesCache = { at: Date.now(), value: data };
     return { ok: true as const, data };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : 'updates_network_error' };
@@ -1621,15 +1632,8 @@ ipcMain.handle('deskoy:windowMinimize', async () => {
 });
 
 ipcMain.handle('deskoy:windowToggleMaximize', async () => {
-  if (!settingsWindow || settingsWindow.isDestroyed()) {
-    return { ok: false, isMaximized: false };
-  }
-  if (settingsWindow.isMaximized()) {
-    settingsWindow.unmaximize();
-  } else {
-    settingsWindow.maximize();
-  }
-  return { ok: true, isMaximized: settingsWindow.isMaximized() };
+  // Window size is fixed; maximize is disabled.
+  return { ok: true, isMaximized: false };
 });
 
 ipcMain.handle('deskoy:windowClose', async () => {

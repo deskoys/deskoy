@@ -52,17 +52,11 @@ contextBridge.exposeInMainWorld('deskoy', {
   sendFeedback: (payload: FeedbackPayload) => ipcRenderer.invoke('deskoy:sendFeedback', payload),
   sendBugReport: (payload: BugReportPayload) => ipcRenderer.invoke('deskoy:sendBugReport', payload),
   windowMinimize: () => ipcRenderer.invoke('deskoy:windowMinimize'),
-  windowToggleMaximize: () => ipcRenderer.invoke('deskoy:windowToggleMaximize'),
   windowClose: () => ipcRenderer.invoke('deskoy:windowClose'),
   onStateChanged: (cb: (state: { active: boolean }) => void) => {
     const handler = (_: unknown, payload: { active: boolean }) => cb(payload);
     ipcRenderer.on('deskoy:stateChanged', handler);
     return () => ipcRenderer.removeListener('deskoy:stateChanged', handler);
-  },
-  onWindowMaximizedChanged: (cb: (state: { maximized: boolean }) => void) => {
-    const handler = (_: unknown, payload: { maximized: boolean }) => cb(payload);
-    ipcRenderer.on('deskoy:windowMaximizedChanged', handler);
-    return () => ipcRenderer.removeListener('deskoy:windowMaximizedChanged', handler);
   },
   onCoverFallback: (cb: (info: { reason: string }) => void) => {
     const handler = (_: unknown, payload: { reason: string }) => cb(payload);

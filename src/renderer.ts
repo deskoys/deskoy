@@ -103,7 +103,6 @@ const btnSave = el<HTMLButtonElement>('btnSave');
 const settingsStatus = el<HTMLElement>('settingsStatus');
 const btnToggle = el<HTMLButtonElement>('btnToggle');
 const btnMinimize = el<HTMLButtonElement>('btnMinimize');
-const btnMaximize = el<HTMLButtonElement>('btnMaximize');
 const btnClose = el<HTMLButtonElement>('btnClose');
 const licenseOverlay = el<HTMLElement>('licenseOverlay');
 const stateText = el<HTMLElement>('stateText');
@@ -273,10 +272,8 @@ function setToggle(elm: HTMLButtonElement, on: boolean) {
   elm.setAttribute('aria-pressed', String(on));
 }
 
-function setMaximizedUi(maximized: boolean) {
-  btnMaximize.classList.toggle('is-maximized', maximized);
-  btnMaximize.title = maximized ? 'Restore' : 'Maximize';
-  btnMaximize.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize');
+function setMaximizedUi(): void {
+  // Window is fixed-size; maximize is disabled/hidden.
 }
 
 function normalizeTypedHotkey(raw: string): string {
@@ -470,7 +467,7 @@ async function refresh() {
   ]);
 
   setActiveState(state.active);
-  setMaximizedUi(Boolean(state.maximized));
+  setMaximizedUi();
   currentHotkey = typeof settings.hotkey === 'string' ? settings.hotkey : '';
   renderHotkeyBadges(currentHotkey);
   coverUrl.value = settings.coverUrl ?? '';
@@ -745,14 +742,7 @@ btnMinimize.addEventListener('click', async () => {
   await window.deskoy.windowMinimize();
 });
 
-btnMaximize.addEventListener('click', async () => {
-  try {
-    const r = await window.deskoy.windowToggleMaximize();
-    if (r.ok) setMaximizedUi(r.isMaximized);
-  } catch {
-    /* main build missing handler — ignore */
-  }
-});
+// Maximize removed (fixed-size window).
 
 btnClose.addEventListener('click', async () => {
   await window.deskoy.windowClose();
@@ -762,9 +752,7 @@ window.deskoy.onStateChanged((s: { active: boolean }) => {
   setActiveState(s.active);
 });
 
-window.deskoy.onWindowMaximizedChanged((p: { maximized: boolean }) => {
-  setMaximizedUi(p.maximized);
-});
+// Maximize removed (fixed-size window).
 
 window.deskoy.onCoverFallback((info: { reason: string }) => {
   setStatus(settingsStatus, info.reason, 'error');
