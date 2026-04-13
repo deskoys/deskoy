@@ -142,6 +142,12 @@
     background: rgba(255,255,255,0.94);
     border-color: rgba(0,0,0,0.08);
   }
+  [data-theme="light"] .lic-modal__title {
+    color: var(--text-primary);
+  }
+  [data-theme="light"] .lic-modal__subtitle {
+    color: var(--text-secondary);
+  }
   [data-theme="light"] .lic-input {
     background: #e8e8ed; color: var(--text-primary);
   }
@@ -1708,6 +1714,115 @@
   }
   .sp-about-link:hover { filter: brightness(1.2); }
 
+  /* Updates (iOS-style) */
+  .sp-update-shell { max-width: 720px; }
+  .sp-updates-empty {
+    max-width: 56ch;
+    margin: 34px auto 0;
+    padding: 22px 18px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.02);
+    border: 0.5px solid rgba(255,255,255,0.06);
+  }
+  [data-theme="light"] .sp-updates-empty {
+    background: rgba(0,0,0,0.02);
+    border-color: rgba(0,0,0,0.06);
+  }
+  .sp-update-card {
+    background: rgba(255,255,255,0.03);
+    border: 0.5px solid rgba(255,255,255,0.07);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  }
+  [data-theme="light"] .sp-update-card {
+    background: #fff;
+    border-color: rgba(0,0,0,0.06);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  }
+  .sp-update-hero {
+    padding: 18px 18px 14px;
+    background:
+      radial-gradient(1200px 300px at 10% 0%, rgba(131,137,150,0.20), rgba(131,137,150,0) 55%),
+      radial-gradient(900px 240px at 80% 20%, rgba(48,209,88,0.10), rgba(48,209,88,0) 60%);
+    border-bottom: 0.5px solid rgba(255,255,255,0.06);
+  }
+  [data-theme="light"] .sp-update-hero { border-bottom-color: rgba(0,0,0,0.06); }
+  .sp-update-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .sp-update-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .sp-update-badge {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 0.5px solid rgba(255,255,255,0.10);
+    background: rgba(0,0,0,0.12);
+    font-variant-numeric: tabular-nums;
+  }
+  [data-theme="light"] .sp-update-badge { border-color: rgba(0,0,0,0.10); background: rgba(0,0,0,0.04); }
+  .sp-update-sub {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    max-width: 70ch;
+  }
+  .sp-update-body { padding: 14px 18px 16px; }
+  .sp-update-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin: 0 0 8px;
+  }
+  .sp-update-notes {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+  }
+  .sp-update-footer {
+    padding: 14px 18px 16px;
+    border-top: 0.5px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  [data-theme="light"] .sp-update-footer { border-top-color: rgba(0,0,0,0.06); }
+  .sp-update-hint { font-size: 12px; color: var(--text-tertiary); line-height: 1.35; }
+  .sp-update-btn {
+    height: 34px;
+    padding: 0 16px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--accent);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 10px 20px rgba(0,0,0,0.20);
+    transition: transform 120ms ease, filter 140ms ease, opacity 140ms ease;
+  }
+  .sp-update-btn:hover { filter: brightness(1.08); }
+  .sp-update-btn:active { transform: scale(0.98); }
+  .sp-update-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
   .sp-footer-credit {
     padding: 18px 0 0;
     font-size: 11px; color: var(--text-tertiary);
@@ -1745,6 +1860,36 @@
       <div class="lic-btns">
         <button type="button" class="btn btn-ghost" id="btnClearLicense">Clear</button>
         <button type="button" class="btn btn-primary" id="btnValidate">Validate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="license-lock" id="upgradeOverlay">
+  <div class="lic-modal" role="dialog" aria-modal="true" aria-labelledby="upgradeModalTitle">
+    <div class="lic-modal__header">
+      <div class="lic-modal__header-left">
+        <span class="lic-modal__alert-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M11.9998 8.99999V13M11.9998 17H12.0098M10.6151 3.89171L2.39019 18.0983C1.93398 18.8863 1.70588 19.2803 1.73959 19.6037C1.769 19.8857 1.91677 20.142 2.14613 20.3088C2.40908 20.5 2.86435 20.5 3.77487 20.5H20.2246C21.1352 20.5 21.5904 20.5 21.8534 20.3088C22.0827 20.142 22.2305 19.8857 22.2599 19.6037C22.2936 19.2803 22.0655 18.8863 21.6093 18.0983L13.3844 3.89171C12.9299 3.10654 12.7026 2.71396 12.4061 2.58211C12.1474 2.4671 11.8521 2.4671 11.5935 2.58211C11.2969 2.71396 11.0696 3.10655 10.6151 3.89171Z"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <div>
+          <h2 id="upgradeModalTitle" class="lic-modal__title">Update required</h2>
+          <p class="lic-modal__subtitle" id="upgradeModalSubtitle">This version is discontinued.</p>
+        </div>
+      </div>
+    </div>
+    <div class="lic-modal__body">
+      <div class="license-status error" id="upgradeStatus"></div>
+      <div class="lic-btns">
+        <button type="button" class="btn btn-primary" id="btnUpgrade">Get latest</button>
       </div>
     </div>
   </div>
@@ -2169,7 +2314,7 @@
               <div style="font-size:12px;color:var(--text-primary);font-weight:600;">Blocked Window List</div>
               <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">
                 Enter domains, filenames, or keywords to block. 
-                <a href="https://www.deskoy.com/docs/licensing" target="_blank" class="lic-link">Learn more</a>
+                <a href="https://www.deskoy.com/docs/auto-protect" target="_blank" class="lic-link">Learn more</a>
               </div>
             </div>
           </div>
@@ -2301,6 +2446,20 @@
           </svg>
         </span>
         Bug Report
+      </button>
+      <button type="button" class="sp-nav-btn" id="spNavUpdates" data-page="updates">
+        <span class="sp-nav-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M8 17L12 21M12 21L16 17M12 21V12M20 16.7428C21.2215 15.734 22 14.2079 22 12.5C22 9.46243 19.5376 7 16.5 7C16.2815 7 16.0771 6.886 15.9661 6.69774C14.6621 4.48484 12.2544 3 9.5 3C5.35786 3 2 6.35786 2 10.5C2 12.5661 2.83545 14.4371 4.18695 15.7935"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        Updates
       </button>
       <div class="sp-nav-section">Info</div>
       <button type="button" class="sp-nav-btn" id="spNavAbout" data-page="about">
@@ -2511,6 +2670,39 @@
                   <span class="sp-form-status" id="spBugStatus"></span>
                   <button type="button" class="sp-form-submit" id="spBugSend">Send Report</button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sp-page" id="spPageUpdates" data-page="updates">
+          <div class="sp-page-title">Updates</div>
+          <p class="sp-page-sub">Install the latest version of Deskoy.</p>
+
+          <div class="sp-update-shell">
+            <p class="sp-updates-empty" id="spUpdatesEmpty">
+              You&rsquo;re up to date. We&rsquo;ll post updates here when a new version is available.
+            </p>
+
+            <div class="sp-update-card" id="spUpdatesCard" role="region" aria-label="Latest update announcement" hidden>
+              <div class="sp-update-hero">
+                <div class="sp-update-hero-top">
+                  <div>
+                    <div class="sp-update-title" id="spUpdatesTitle">—</div>
+                    <div class="sp-update-sub" id="spUpdatesHint">Updates appear here when available.</div>
+                  </div>
+                  <div class="sp-update-badge" id="spUpdatesVersion">—</div>
+                </div>
+              </div>
+
+              <div class="sp-update-body">
+                <div class="sp-update-section-title">What’s new</div>
+                <div class="sp-update-notes" id="spUpdatesNotes">—</div>
+              </div>
+
+              <div class="sp-update-footer">
+                <div class="sp-update-hint">Download the latest version to get these changes.</div>
+                <button type="button" class="sp-update-btn" id="spUpdatesDownload">Download</button>
               </div>
             </div>
           </div>

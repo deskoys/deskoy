@@ -20,6 +20,10 @@ const licenseKey = el<HTMLInputElement>('licenseKey');
 const btnValidate = el<HTMLButtonElement>('btnValidate');
 const btnClearLicense = el<HTMLButtonElement>('btnClearLicense');
 const licenseStatus = el<HTMLElement>('licenseStatus');
+const upgradeOverlay = el<HTMLElement>('upgradeOverlay');
+const upgradeStatus = el<HTMLElement>('upgradeStatus');
+const btnUpgrade = el<HTMLButtonElement>('btnUpgrade');
+const upgradeModalSubtitle = el<HTMLElement>('upgradeModalSubtitle');
 
 /** Opens in the default browser (see `deskoy:openExternal` in main). */
 const HELP_URL = 'https://www.deskoy.com/docs/support';
@@ -28,6 +32,7 @@ const LICENSING_DOCS_URL = 'https://www.deskoy.com/docs/licensing';
 /** Public uptime / incidents page for Deskoy online services. */
 const STATUS_PAGE_URL = 'https://www.deskoy.com/status';
 const TERMS_OF_SERVICE_URL = 'https://www.deskoy.com/terms';
+const DESKOY_DOWNLOAD_URL = 'https://www.deskoy.com/download';
 
 function renderLicenseMissingPrompt() {
   licenseStatus.innerHTML = `Don&rsquo;t have a <a href="${LICENSING_DOCS_URL}" class="lic-link">License key</a>?`;
@@ -44,6 +49,18 @@ document.body.addEventListener('click', (e) => {
 
 el<HTMLAnchorElement>('spFeedbackTermsLink').setAttribute('href', TERMS_OF_SERVICE_URL);
 el<HTMLAnchorElement>('spBugTermsLink').setAttribute('href', TERMS_OF_SERVICE_URL);
+
+let upgradeDownloadUrl = DESKOY_DOWNLOAD_URL;
+btnUpgrade.addEventListener('click', () => void window.deskoy.openExternal(upgradeDownloadUrl));
+
+function showUpgradeRequired(payload: { message: string; downloadUrl: string; minimumVersion?: string }) {
+  upgradeDownloadUrl = payload.downloadUrl || DESKOY_DOWNLOAD_URL;
+  upgradeModalSubtitle.textContent = payload.minimumVersion
+    ? `This version is discontinued. Update to ${payload.minimumVersion} or newer.`
+    : 'This version is discontinued.';
+  upgradeStatus.textContent = payload.message || 'Please install the latest Deskoy to keep using it.';
+  upgradeOverlay.classList.add('show');
+}
 
 function flashLicenseInputError() {
   licenseKey.classList.add('lic-input--error');
@@ -105,12 +122,14 @@ const spNavAppearance = el<HTMLButtonElement>('spNavAppearance');
 const spNavLicense = el<HTMLButtonElement>('spNavLicense');
 const spNavFeedback = el<HTMLButtonElement>('spNavFeedback');
 const spNavBug = el<HTMLButtonElement>('spNavBug');
+const spNavUpdates = el<HTMLButtonElement>('spNavUpdates');
 const spNavAbout = el<HTMLButtonElement>('spNavAbout');
 const spPageGeneral = el<HTMLElement>('spPageGeneral');
 const spPageAppearance = el<HTMLElement>('spPageAppearance');
 const spPageLicense = el<HTMLElement>('spPageLicense');
 const spPageFeedback = el<HTMLElement>('spPageFeedback');
 const spPageBug = el<HTMLElement>('spPageBug');
+const spPageUpdates = el<HTMLElement>('spPageUpdates');
 const spPageAbout = el<HTMLElement>('spPageAbout');
 const spLicBadge = el<HTMLElement>('spLicBadge');
 const spLicStatus = el<HTMLElement>('spLicStatus');
@@ -495,6 +514,10 @@ async function refresh() {
     licenseStatus.classList.add('error');
   }
 }
+
+window.deskoy.onUpgradeRequired((payload) => {
+  showUpgradeRequired(payload);
+});
 
 // Webhooks are configured in the main process (not user-editable).
 
@@ -1007,13 +1030,66 @@ spHelp.addEventListener('click', () => {
   void window.deskoy.openExternal(HELP_URL);
 });
 
+const UPDATES_API_URL = 'https://api.deskoy.com/api/updates';
+const spUpdatesTitle = el<HTMLElement>('spUpdatesTitle');
+const spUpdatesVersion = el<HTMLElement>('spUpdatesVersion');
+const spUpdatesNotes = el<HTMLElement>('spUpdatesNotes');
+const spUpdatesDownload = el<HTMLButtonElement>('spUpdatesDownload');
+const spUpdatesHint = el<HTMLElement>('spUpdatesHint');
+const spUpdatesEmpty = el<HTMLElement>('spUpdatesEmpty');
+const spUpdatesCard = el<HTMLElement>('spUpdatesCard');
+let updatesDownloadUrl = 'https://www.deskoy.com/download';
+
+spUpdatesDownload.addEventListener('click', () => void window.deskoy.openExternal(updatesDownloadUrl));
+
+async function refreshUpdatesPanel() {
+  try {
+    spUpdatesEmpty.textContent = 'Checking for updates…';
+    spUpdatesCard.toggleAttribute('hidden', true);
+    spUpdatesEmpty.removeAttribute('hidden');
+    const resp = await fetch(UPDATES_API_URL, { method: 'GET' });
+    if (!resp.ok) throw new Error(`updates_http_${resp.status}`);
+    const data = (await resp.json()) as any;
+    if (!data || data.ok !== true) throw new Error('updates_bad_payload');
+
+    const visible = Boolean(data.visible);
+    const title = typeof data.title === 'string' ? data.title.trim() : '';
+    const version = typeof data.version === 'string' ? data.version.trim() : '';
+    const notes = typeof data.notes === 'string' ? data.notes.trim() : '';
+    const downloadUrl = typeof data.downloadUrl === 'string' ? data.downloadUrl.trim() : '';
+
+    updatesDownloadUrl = downloadUrl || updatesDownloadUrl;
+    if (!visible) {
+      spUpdatesEmpty.textContent =
+        'You’re up to date. We’ll post updates here when a new version is available.';
+      spUpdatesEmpty.removeAttribute('hidden');
+      spUpdatesCard.toggleAttribute('hidden', true);
+      return;
+    }
+
+    spUpdatesTitle.textContent = title || 'Deskoy update';
+    spUpdatesVersion.textContent = version || '—';
+    spUpdatesNotes.textContent = notes || '—';
+    spUpdatesHint.textContent = 'Latest update available.';
+    spUpdatesDownload.disabled = !updatesDownloadUrl;
+    spUpdatesEmpty.toggleAttribute('hidden', true);
+    spUpdatesCard.removeAttribute('hidden');
+  } catch {
+    // fail-open
+    spUpdatesCard.toggleAttribute('hidden', true);
+    spUpdatesEmpty.textContent =
+      'Updates aren’t available right now. Please check again later.';
+    spUpdatesEmpty.removeAttribute('hidden');
+  }
+}
+
 function openDeskoyStatusPage() {
   void window.deskoy.openExternal(STATUS_PAGE_URL);
 }
 spAboutStatus.addEventListener('click', openDeskoyStatusPage);
 spStatusPageGeneral.addEventListener('click', openDeskoyStatusPage);
 
-type SettingsPage = 'general' | 'appearance' | 'license' | 'feedback' | 'bug' | 'about';
+type SettingsPage = 'general' | 'appearance' | 'license' | 'feedback' | 'bug' | 'updates' | 'about';
 
 function setSettingsPage(page: SettingsPage) {
   const nav: Array<[HTMLButtonElement, SettingsPage]> = [
@@ -1022,6 +1098,7 @@ function setSettingsPage(page: SettingsPage) {
     [spNavLicense, 'license'],
     [spNavFeedback, 'feedback'],
     [spNavBug, 'bug'],
+    [spNavUpdates, 'updates'],
     [spNavAbout, 'about'],
   ];
   nav.forEach(([btn, p]) => btn.classList.toggle('active', p === page));
@@ -1032,6 +1109,7 @@ function setSettingsPage(page: SettingsPage) {
     [spPageLicense, 'license'],
     [spPageFeedback, 'feedback'],
     [spPageBug, 'bug'],
+    [spPageUpdates, 'updates'],
     [spPageAbout, 'about'],
   ];
   pages.forEach(([elm, p]) => elm.classList.toggle('active', p === page));
@@ -1042,12 +1120,14 @@ function setSettingsPage(page: SettingsPage) {
     license: 'License',
     feedback: 'Feedback',
     bug: 'Bug Report',
+    updates: 'Updates',
     about: 'About',
   };
   spHeaderTitle.textContent = titleMap[page];
 
   if (page === 'license') refreshPanelLicense();
   if (page === 'general') refreshGeneralPanel();
+  if (page === 'updates') void refreshUpdatesPanel();
 }
 
 function bindNav(btn: HTMLButtonElement, page: SettingsPage) {
@@ -1058,6 +1138,7 @@ bindNav(spNavAppearance, 'appearance');
 bindNav(spNavLicense, 'license');
 bindNav(spNavFeedback, 'feedback');
 bindNav(spNavBug, 'bug');
+bindNav(spNavUpdates, 'updates');
 bindNav(spNavAbout, 'about');
 
 function refreshGeneralPanel() {

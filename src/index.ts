@@ -240,6 +240,119 @@ function markSentRateLimit(kind: 'feedback' | 'bug') {
   store.set(rateLimitTimestampKey(kind), Date.now());
 }
 
+type VersionPolicy = {
+  ok: true;
+  minimumVersion?: string;
+  blockedVersions?: string[];
+  message?: string;
+  downloadUrl?: string;
+};
+
+const VERSION_POLICY_URL =
+  process.env.DESKOY_VERSION_POLICY_URL?.trim() || 'https://api.deskoy.com/api/version-policy';
+
+let upgradeBlock:
+  | null
+  | {
+      message: string;
+      downloadUrl: string;
+      minimumVersion?: string;
+    } = null;
+
+const VERSION_POLICY_POLL_MS = 6 * 60 * 60 * 1000;
+let versionPolicyTimer: NodeJS.Timeout | null = null;
+
+function parseVersionTriplet(v: string): [number, number, number] | null {
+  const m = v.trim().match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return null;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  const c = Number(m[3]);
+  if (![a, b, c].every((n) => Number.isFinite(n) && n >= 0)) return null;
+  return [a, b, c];
+}
+
+function isVersionLessThan(a: string, b: string): boolean {
+  const av = parseVersionTriplet(a);
+  const bv = parseVersionTriplet(b);
+  if (!av || !bv) return false;
+  if (av[0] !== bv[0]) return av[0] < bv[0];
+  if (av[1] !== bv[1]) return av[1] < bv[1];
+  return av[2] < bv[2];
+}
+
+function isBlockedByPolicy(appVersion: string, policy: VersionPolicy): boolean {
+  const blocked = Array.isArray(policy.blockedVersions) ? policy.blockedVersions : [];
+  if (blocked.includes(appVersion)) return true;
+  if (policy.minimumVersion && isVersionLessThan(appVersion, policy.minimumVersion)) return true;
+  return false;
+}
+
+function sendUpgradeRequiredIfAny() {
+  const block = upgradeBlock;
+  if (!block) return;
+  if (!settingsWindow || settingsWindow.isDestroyed()) return;
+  settingsWindow.webContents.send('deskoy:upgradeRequired', block);
+}
+
+async function checkVersionPolicyFailOpen(): Promise<void> {
+  try {
+    if (upgradeBlock) return;
+    const resp = await fetch(VERSION_POLICY_URL, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'DeskoyDesktop/1 (Electron)',
+      },
+    });
+    if (!resp.ok) return;
+    const data = (await resp.json()) as unknown;
+    if (!data || typeof data !== 'object') return;
+    const p = data as Partial<VersionPolicy>;
+    if (p.ok !== true) return;
+    const policy = p as VersionPolicy;
+    const v = app.getVersion();
+    if (!isBlockedByPolicy(v, policy)) return;
+
+    const message =
+      typeof policy.message === 'string' && policy.message.trim()
+        ? policy.message.trim()
+        : 'This version is discontinued. Please install the latest Deskoy to keep using it.';
+    const downloadUrl =
+      typeof policy.downloadUrl === 'string' && policy.downloadUrl.trim()
+        ? policy.downloadUrl.trim()
+        : 'https://www.deskoy.com/download';
+
+    upgradeBlock = {
+      message,
+      downloadUrl,
+      minimumVersion: policy.minimumVersion,
+    };
+    // Disable any active protection immediately.
+    if (getSettings().enabled) {
+      setSettings({ enabled: false });
+      sendState();
+    }
+    stopAutoCoverWatcher();
+    createSettingsWindow(true);
+    sendUpgradeRequiredIfAny();
+  } catch {
+    // fail-open
+  }
+}
+
+function startVersionPolicyWatcher() {
+  if (versionPolicyTimer) return;
+  versionPolicyTimer = setInterval(() => {
+    void checkVersionPolicyFailOpen();
+  }, VERSION_POLICY_POLL_MS);
+}
+
+function stopVersionPolicyWatcher() {
+  if (!versionPolicyTimer) return;
+  clearInterval(versionPolicyTimer);
+  versionPolicyTimer = null;
+}
+
 function defaultSettings(): DeskoySettings {
   return {
     hotkey: '',
@@ -362,6 +475,14 @@ let coverOpenAt = 0;
 const COVER_MIN_VISIBLE_MS = 600;
 let lastBlockedCoverAt = 0;
 const BLOCKED_COVER_COOLDOWN_MS = 6000;
+/** The HWND that triggered the most recent blocked cover session, cleared after cooldown. */
+let lastBlockedHwnd = 0;
+/** The PID that triggered the most recent blocked cover session, cleared after cooldown. */
+let lastBlockedPid = 0;
+/** The process name that triggered the most recent blocked cover session, cleared after cooldown.
+ *  Used to suppress re-triggering on a different window of the same process (e.g. another
+ *  Chrome window with the same blocked URL open) during the cooldown period. */
+let lastBlockedProcessName = '';
 let autoCoverTimer: NodeJS.Timeout | null = null;
 let autoCoverTickRunning = false;
 /** Polls until the blocked target window is closed/minimized so the cover can dismiss. */
@@ -662,6 +783,16 @@ async function closeCoverSession(): Promise<void> {
     // Now that we hold the lock, stop the poll timer.
     clearBlockedCoverPollTimer();
     try {
+      // If this was a blocked session, refresh the cooldown clock from *close* time so the
+      // watcher doesn't immediately re-trigger on the same (still-minimized) window.
+      // Also record the trigger HWND/PID so the watcher can skip that exact window for the
+      // full cooldown period even if it regains focus.
+      if (coverSession?.reason === 'blocked') {
+        lastBlockedCoverAt = Date.now();
+        lastBlockedHwnd = coverSession.trigger?.hwnd ?? 0;
+        lastBlockedPid = coverSession.trigger?.pid ?? 0;
+        lastBlockedProcessName = (coverSession.trigger?.processName ?? '').toLowerCase();
+      }
       closeCover();
       coverOpen = false;
       coverBusy = false;
@@ -776,6 +907,23 @@ async function openCoverIfAllowed(
   if (now - lastBlockedCoverAt < BLOCKED_COVER_COOLDOWN_MS) return;
   lastBlockedCoverAt = now;
 
+  // Also suppress if the watcher detected the same HWND/PID that we just closed — the window
+  // may still be technically "foreground" for a few hundred ms during the OS focus transition
+  // after being minimized. This prevents the cover from immediately re-opening on the same window.
+  // We also suppress on matching process name alone: for URL-blocked triggers the browser
+  // (chrome.exe, msedge.exe, etc.) may shift focus to a *different* window of the same process
+  // that also has the blocked URL open — a different HWND but the same root cause.
+  if (triggerInfo) {
+    const sameHwnd =
+      lastBlockedHwnd &&
+      triggerInfo.hwnd === lastBlockedHwnd &&
+      triggerInfo.pid === lastBlockedPid;
+    const sameProcess =
+      lastBlockedProcessName &&
+      (triggerInfo.processName || '').toLowerCase() === lastBlockedProcessName;
+    if (sameHwnd || sameProcess) return;
+  }
+
   const hasHwnd = process.platform === 'win32' && !!triggerInfo?.hwnd;
 
   // Set state flags immediately so any re-entrant watcher ticks bail out.
@@ -849,6 +997,11 @@ async function toggleDeskoyArmed(): Promise<{
   active: boolean;
   error?: string;
 }> {
+  if (upgradeBlock) {
+    createSettingsWindow(true);
+    sendUpgradeRequiredIfAny();
+    return { ok: false, active: false, error: 'upgrade_required' };
+  }
   const prev = getSettings();
   const cur = prev.enabled;
   const next = !cur;
@@ -1034,6 +1187,13 @@ function startAutoCoverWatcher() {
       if (!s.enabled) return;
       if (!s.autoCoverBlocked) return;
       if (coverOpen || coverBusy) return;
+      // Once the cooldown has fully elapsed, clear the per-HWND suppression so the same
+      // window can legitimately trigger again if the user re-opens it after the cooldown.
+      if ((lastBlockedHwnd || lastBlockedProcessName) && Date.now() - lastBlockedCoverAt >= BLOCKED_COVER_COOLDOWN_MS) {
+        lastBlockedHwnd = 0;
+        lastBlockedPid = 0;
+        lastBlockedProcessName = '';
+      }
       const lic = await getLicenseValidity();
       if (lic.status !== 'valid') return;
       const info = await getActiveWindowInfo();
@@ -1074,6 +1234,13 @@ app.on('ready', () => {
     const lic = await getLicenseValidity();
     const shouldShowOnLaunch = freshInstall || lic.status !== 'valid';
     createSettingsWindow(shouldShowOnLaunch);
+    // If we ever need to force-upgrade/discontinue a build, do it here (fail-open).
+    await checkVersionPolicyFailOpen();
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.once('did-finish-load', () => sendUpgradeRequiredIfAny());
+    }
+    if (upgradeBlock) return;
+    startVersionPolicyWatcher();
     if (shouldShowOnLaunch) {
       if (getSettings().enabled) {
         setSettings({ enabled: false });
@@ -1096,6 +1263,7 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  stopVersionPolicyWatcher();
   stopAutoCoverWatcher();
   clearBlockedCoverPollTimer();
   if (registeredHotkey) {
@@ -1148,6 +1316,7 @@ ipcMain.handle('deskoy:saveSettings', async (_evt, patch: Partial<DeskoySettings
   try {
     const prev = getSettings();
     if (patch.enabled) {
+      if (upgradeBlock) return { ok: false, error: 'upgrade_required' };
       const lic = await getLicenseValidity();
       if (lic.status !== 'valid') return { ok: false, error: 'license_required' };
     }

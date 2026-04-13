@@ -67,5 +67,13 @@ contextBridge.exposeInMainWorld('deskoy', {
     ipcRenderer.on('deskoy:coverFallback', handler);
     return () => ipcRenderer.removeListener('deskoy:coverFallback', handler);
   },
+  onUpgradeRequired: (cb: (payload: { message: string; downloadUrl: string; minimumVersion?: string }) => void) => {
+    const handler = (
+      _: unknown,
+      payload: { message: string; downloadUrl: string; minimumVersion?: string },
+    ) => cb(payload);
+    ipcRenderer.on('deskoy:upgradeRequired', handler);
+    return () => ipcRenderer.removeListener('deskoy:upgradeRequired', handler);
+  },
 });
 
