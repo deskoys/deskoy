@@ -5,6 +5,7 @@ declare global {
     deskoy: {
       openExternal: (url: string) => Promise<{ ok: boolean }>;
       getAppVersion: () => Promise<{ version: string; name: string }>;
+      getUpdates: () => Promise<{ ok: boolean; data?: unknown; error?: string }>;
       getState: () => Promise<{ active: boolean; maximized: boolean }>;
       toggle: () => Promise<{ active: boolean; ok: boolean; error?: string }>;
       getSettings: () => Promise<{

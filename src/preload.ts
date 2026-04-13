@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('deskoy', {
   openExternal: (url: string) => ipcRenderer.invoke('deskoy:openExternal', url) as Promise<{ ok: boolean }>,
   getAppVersion: () =>
     ipcRenderer.invoke('deskoy:getAppVersion') as Promise<{ version: string; name: string }>,
+  getUpdates: () =>
+    ipcRenderer.invoke('deskoy:getUpdates') as Promise<{ ok: boolean; data?: unknown; error?: string }>,
   getState: () => ipcRenderer.invoke('deskoy:getState'),
   toggle: () => ipcRenderer.invoke('deskoy:toggle'),
   getSettings: () => ipcRenderer.invoke('deskoy:getSettings'),

@@ -53,13 +53,19 @@ el<HTMLAnchorElement>('spBugTermsLink').setAttribute('href', TERMS_OF_SERVICE_UR
 let upgradeDownloadUrl = DESKOY_DOWNLOAD_URL;
 btnUpgrade.addEventListener('click', () => void window.deskoy.openExternal(upgradeDownloadUrl));
 
+let upgradeRequiredActive = false;
+
 function showUpgradeRequired(payload: { message: string; downloadUrl: string; minimumVersion?: string }) {
+  upgradeRequiredActive = true;
   upgradeDownloadUrl = payload.downloadUrl || DESKOY_DOWNLOAD_URL;
   upgradeModalSubtitle.textContent = payload.minimumVersion
     ? `This version is discontinued. Update to ${payload.minimumVersion} or newer.`
     : 'This version is discontinued.';
   upgradeStatus.textContent = payload.message || 'Please install the latest Deskoy to keep using it.';
   upgradeOverlay.classList.add('show');
+  document.documentElement.classList.add('upgrade-required');
+  // Ensure the settings side panel can't be opened behind the overlay.
+  closeSettingsPanel();
 }
 
 function flashLicenseInputError() {
@@ -136,12 +142,8 @@ const spLicStatus = el<HTMLElement>('spLicStatus');
 const spLicKey = el<HTMLElement>('spLicKey');
 const spManageLicense = el<HTMLButtonElement>('spManageLicense');
 const spThemeTrack = el<HTMLElement>('spThemeTrack');
-const spGeneralStatusText = el<HTMLElement>('spGeneralStatusText');
-const spGeneralStatusSub = el<HTMLElement>('spGeneralStatusSub');
-const spGeneralStatusPill = el<HTMLElement>('spGeneralStatusPill');
 const spGeneralHotkey = el<HTMLElement>('spGeneralHotkey');
 const spGeneralVersion = el<HTMLElement>('spGeneralVersion');
-const spGeneralArmBtn = el<HTMLButtonElement>('spGeneralArmBtn');
 const spGoHotkey = el<HTMLButtonElement>('spGoHotkey');
 const spLicenseLicensing = el<HTMLButtonElement>('spLicenseLicensing');
 
@@ -796,6 +798,7 @@ btnChangelog.addEventListener('click', () => {
 // Feedback/bug reports: main process → API relay → Discord (see deskoy-relay/ in this repo).
 
 function openSettingsPanel() {
+  if (upgradeRequiredActive) return;
   spPanel.classList.remove('closing');
   spBackdrop.classList.add('open');
   spPanel.classList.add('open');
@@ -822,6 +825,7 @@ function isSettingsPanelOpen() {
 }
 
 btnGear.addEventListener('click', () => {
+  if (upgradeRequiredActive) return;
   if (isSettingsPanelOpen()) closeSettingsPanel();
   else openSettingsPanel();
 });
@@ -1030,7 +1034,6 @@ spHelp.addEventListener('click', () => {
   void window.deskoy.openExternal(HELP_URL);
 });
 
-const UPDATES_API_URL = 'https://api.deskoy.com/api/updates';
 const spUpdatesTitle = el<HTMLElement>('spUpdatesTitle');
 const spUpdatesVersion = el<HTMLElement>('spUpdatesVersion');
 const spUpdatesNotes = el<HTMLElement>('spUpdatesNotes');
@@ -1047,9 +1050,9 @@ async function refreshUpdatesPanel() {
     spUpdatesEmpty.textContent = 'Checking for updates…';
     spUpdatesCard.toggleAttribute('hidden', true);
     spUpdatesEmpty.removeAttribute('hidden');
-    const resp = await fetch(UPDATES_API_URL, { method: 'GET' });
-    if (!resp.ok) throw new Error(`updates_http_${resp.status}`);
-    const data = (await resp.json()) as any;
+    const res = await window.deskoy.getUpdates();
+    if (!res.ok) throw new Error(res.error || 'updates_failed');
+    const data = res.data as any;
     if (!data || data.ok !== true) throw new Error('updates_bad_payload');
 
     const visible = Boolean(data.visible);
@@ -1144,18 +1147,7 @@ bindNav(spNavAbout, 'about');
 function refreshGeneralPanel() {
   spGeneralVersion.textContent = appVersion.textContent || '—';
   spGeneralHotkey.textContent = currentHotkey.trim() ? currentHotkey : 'Not set';
-
-  const on = deskoyArmed;
-  spGeneralStatusText.textContent = on ? 'Active' : 'Paused';
-  spGeneralStatusSub.textContent = on
-    ? 'Hotkey is registered—press it anytime to show your cover.'
-    : 'Paused: hotkey is unregistered until you resume.';
-  spGeneralStatusPill.classList.toggle('on', on);
-  spGeneralArmBtn.textContent = on ? 'Pause Deskoy' : 'Resume Deskoy';
-  spGeneralArmBtn.classList.toggle('on', on);
 }
-
-spGeneralArmBtn.addEventListener('click', () => btnToggle.click());
 
 spGoHotkey.addEventListener('click', () => {
   closeSettingsPanel();

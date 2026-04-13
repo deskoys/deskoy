@@ -1304,6 +1304,22 @@ ipcMain.handle('deskoy:getAppVersion', async () => ({
   name: app.getName(),
 }));
 
+const UPDATES_API_URL = process.env.DESKOY_UPDATES_URL?.trim() || 'https://api.deskoy.com/api/updates';
+ipcMain.handle('deskoy:getUpdates', async () => {
+  try {
+    const resp = await fetch(UPDATES_API_URL, {
+      method: 'GET',
+      headers: { 'User-Agent': 'DeskoyDesktop/1 (Electron)' },
+    });
+    if (!resp.ok) return { ok: false as const, error: `updates_http_${resp.status}` };
+    const data = (await resp.json()) as unknown;
+    if (!data || typeof data !== 'object') return { ok: false as const, error: 'updates_bad_payload' };
+    return { ok: true as const, data };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : 'updates_network_error' };
+  }
+});
+
 ipcMain.handle('deskoy:getState', async () => ({
   active: getSettings().enabled,
   maximized:

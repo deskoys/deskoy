@@ -192,6 +192,12 @@
     border-color: rgba(0,0,0,0.06);
     box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset;
   }
+  /* When a build is discontinued, lock Settings access (gear). */
+  .upgrade-required .titlebar-gear {
+    pointer-events: none;
+    opacity: 0.35;
+    filter: grayscale(1);
+  }
   [data-theme="light"] .sp-arm-btn {
     background: linear-gradient(180deg, #fff 0%, #f0f0f3 100%);
     border-color: rgba(0,0,0,0.1);
@@ -2447,6 +2453,7 @@
         </span>
         Bug Report
       </button>
+      <div class="sp-nav-section">Info</div>
       <button type="button" class="sp-nav-btn" id="spNavUpdates" data-page="updates">
         <span class="sp-nav-icon" aria-hidden="true">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -2461,7 +2468,6 @@
         </span>
         Updates
       </button>
-      <div class="sp-nav-section">Info</div>
       <button type="button" class="sp-nav-btn" id="spNavAbout" data-page="about">
         <span class="sp-nav-icon" aria-hidden="true">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -2488,19 +2494,6 @@
               <p class="sp-page-sub">Runtime status, hotkey, and a few things worth remembering mid-workday.</p>
             </div>
             <span class="sp-page-version" id="spGeneralVersion" title="Current build">—</span>
-          </div>
-
-          <div class="sp-general-hero">
-            <div class="sp-general-hero-inner">
-              <div class="sp-general-hero-top">
-                <span class="sp-general-hero-label">Protection</span>
-                <span class="sp-pill" id="spGeneralStatusPill"><span class="dot" aria-hidden="true"></span><span id="spGeneralStatusText">—</span></span>
-              </div>
-              <p class="sp-general-hero-sub" id="spGeneralStatusSub">—</p>
-              <div class="sp-general-hero-actions">
-                <button type="button" class="sp-arm-btn" id="spGeneralArmBtn">Resume Deskoy</button>
-              </div>
-            </div>
           </div>
 
           <div class="sp-general-split">
