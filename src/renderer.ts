@@ -1,5 +1,5 @@
 import './index.css';
-import brandLogoUrl from './assets/brand-logo.png';
+import brandLogoUrl from '../assets/logo.png';
 
 /** Matches `saveSettings` / store `coverMode` in `global.d.ts`. */
 type DeskoyCoverMode = 'excel' | 'vscode' | 'docs' | 'jira' | 'bi' | 'black' | 'url' | 'file';
@@ -16,10 +16,6 @@ function el<T extends HTMLElement>(id: string): T {
 const brandLogoImg = el<HTMLImageElement>('brandLogoImg');
 brandLogoImg.src = brandLogoUrl;
 
-const licenseKey = el<HTMLInputElement>('licenseKey');
-const btnValidate = el<HTMLButtonElement>('btnValidate');
-const btnClearLicense = el<HTMLButtonElement>('btnClearLicense');
-const licenseStatus = el<HTMLElement>('licenseStatus');
 const upgradeOverlay = el<HTMLElement>('upgradeOverlay');
 const upgradeStatus = el<HTMLElement>('upgradeStatus');
 const btnUpgrade = el<HTMLButtonElement>('btnUpgrade');
@@ -28,15 +24,10 @@ const upgradeModalSubtitle = el<HTMLElement>('upgradeModalSubtitle');
 /** Opens in the default browser (see `deskoy:openExternal` in main). */
 const HELP_URL = 'https://www.deskoy.com/docs/support';
 const CHANGELOG_URL = 'https://www.deskoy.com/changelog';
-const LICENSING_DOCS_URL = 'https://www.deskoy.com/docs/licensing';
 /** Public uptime / incidents page for Deskoy online services. */
 const STATUS_PAGE_URL = 'https://www.deskoy.com/status';
 const TERMS_OF_SERVICE_URL = 'https://www.deskoy.com/terms';
 const DESKOY_DOWNLOAD_URL = 'https://www.deskoy.com/download';
-
-function renderLicenseMissingPrompt() {
-  licenseStatus.innerHTML = `Don&rsquo;t have a <a href="${LICENSING_DOCS_URL}" class="lic-link">License key</a>?`;
-}
 
 document.body.addEventListener('click', (e) => {
   const a = (e.target as HTMLElement).closest('a.lic-link');
@@ -68,17 +59,6 @@ function showUpgradeRequired(payload: { message: string; downloadUrl: string; mi
   closeSettingsPanel();
 }
 
-function flashLicenseInputError() {
-  licenseKey.classList.add('lic-input--error');
-  licenseKey.classList.remove('lic-input--shake');
-  void licenseKey.offsetWidth;
-  licenseKey.classList.add('lic-input--shake');
-  window.setTimeout(() => licenseKey.classList.remove('lic-input--shake'), 500);
-}
-
-licenseKey.addEventListener('input', () => {
-  licenseKey.classList.remove('lic-input--error');
-});
 const hotkeyRow = el<HTMLElement>('hotkeyRow');
 const hotkeyCapture = el<HTMLElement>('hotkeyCapture');
 const hotkeyBadges = el<HTMLElement>('hotkeyBadges');
@@ -104,7 +84,6 @@ const settingsStatus = el<HTMLElement>('settingsStatus');
 const btnToggle = el<HTMLButtonElement>('btnToggle');
 const btnMinimize = el<HTMLButtonElement>('btnMinimize');
 const btnClose = el<HTMLButtonElement>('btnClose');
-const licenseOverlay = el<HTMLElement>('licenseOverlay');
 const stateText = el<HTMLElement>('stateText');
 const toggleMuteAudio = el<HTMLButtonElement>('toggleMuteAudio');
 const toggleUseCustom = el<HTMLButtonElement>('toggleUseCustom');
@@ -124,27 +103,20 @@ const spClose = el<HTMLButtonElement>('spClose');
 const spHeaderTitle = el<HTMLElement>('spHeaderTitle');
 const spNavGeneral = el<HTMLButtonElement>('spNavGeneral');
 const spNavAppearance = el<HTMLButtonElement>('spNavAppearance');
-const spNavLicense = el<HTMLButtonElement>('spNavLicense');
 const spNavFeedback = el<HTMLButtonElement>('spNavFeedback');
 const spNavBug = el<HTMLButtonElement>('spNavBug');
 const spNavUpdates = el<HTMLButtonElement>('spNavUpdates');
 const spNavAbout = el<HTMLButtonElement>('spNavAbout');
 const spPageGeneral = el<HTMLElement>('spPageGeneral');
 const spPageAppearance = el<HTMLElement>('spPageAppearance');
-const spPageLicense = el<HTMLElement>('spPageLicense');
 const spPageFeedback = el<HTMLElement>('spPageFeedback');
 const spPageBug = el<HTMLElement>('spPageBug');
 const spPageUpdates = el<HTMLElement>('spPageUpdates');
 const spPageAbout = el<HTMLElement>('spPageAbout');
-const spLicBadge = el<HTMLElement>('spLicBadge');
-const spLicStatus = el<HTMLElement>('spLicStatus');
-const spLicKey = el<HTMLElement>('spLicKey');
-const spManageLicense = el<HTMLButtonElement>('spManageLicense');
 const spThemeTrack = el<HTMLElement>('spThemeTrack');
 const spGeneralHotkey = el<HTMLElement>('spGeneralHotkey');
 const spGeneralVersion = el<HTMLElement>('spGeneralVersion');
 const spGoHotkey = el<HTMLButtonElement>('spGoHotkey');
-const spLicenseLicensing = el<HTMLButtonElement>('spLicenseLicensing');
 
 const spFeedbackEmail = el<HTMLInputElement>('spFeedbackEmail');
 const spFeedbackText = el<HTMLTextAreaElement>('spFeedbackText');
@@ -460,11 +432,7 @@ function buildSettingsPatch(): DeskoySaveSettingsPatch {
 }
 
 async function refresh() {
-  const [state, settings, license] = await Promise.all([
-    window.deskoy.getState(),
-    window.deskoy.getSettings(),
-    window.deskoy.getLicenseState(),
-  ]);
+  const [state, settings] = await Promise.all([window.deskoy.getState(), window.deskoy.getSettings()]);
 
   setActiveState(state.active);
   setMaximizedUi();
@@ -496,22 +464,6 @@ async function refresh() {
 
   hasUnsavedChanges = false;
   savedSnapshot = JSON.stringify(buildSettingsPatch());
-
-  if (license.status === 'valid') {
-    licenseOverlay.classList.remove('show');
-    licenseStatus.textContent = `Validated (${new Date(license.lastValidated).toLocaleString()})`;
-    licenseStatus.classList.remove('error');
-    licenseStatus.classList.add('ok');
-  } else if (license.status === 'missing') {
-    licenseOverlay.classList.add('show');
-    renderLicenseMissingPrompt();
-    licenseStatus.classList.remove('ok', 'error');
-  } else {
-    licenseOverlay.classList.add('show');
-    licenseStatus.textContent = `License invalid${license.reason ? `: ${license.reason}` : ''}`;
-    licenseStatus.classList.remove('ok');
-    licenseStatus.classList.add('error');
-  }
 }
 
 window.deskoy.onUpgradeRequired((payload) => {
@@ -656,44 +608,6 @@ toggleUseCustom.addEventListener('click', async () => {
   markUnsaved();
 });
 
-btnValidate.addEventListener('click', async () => {
-  const key = licenseKey.value.trim();
-  if (!key) {
-    licenseStatus.textContent = 'Enter a license key.';
-    licenseStatus.classList.remove('ok');
-    licenseStatus.classList.add('error');
-    flashLicenseInputError();
-    return;
-  }
-  btnValidate.disabled = true;
-  licenseStatus.textContent = 'Validating…';
-  licenseStatus.classList.remove('ok', 'error');
-  try {
-    const res = await window.deskoy.validateLicense(key);
-    if (res.ok && res.valid) {
-      licenseStatus.textContent = 'License validated.';
-      licenseStatus.classList.remove('error');
-      licenseStatus.classList.add('ok');
-      licenseKey.classList.remove('lic-input--error', 'lic-input--shake');
-      await refresh();
-    } else {
-      licenseStatus.textContent = `Validation failed${res.reason ? `: ${res.reason}` : ''}`;
-      licenseStatus.classList.remove('ok');
-      licenseStatus.classList.add('error');
-      flashLicenseInputError();
-    }
-  } finally {
-    btnValidate.disabled = false;
-  }
-});
-
-btnClearLicense.addEventListener('click', async () => {
-  await window.deskoy.clearLicense();
-  licenseKey.value = '';
-  licenseKey.classList.remove('lic-input--error', 'lic-input--shake');
-  await refresh();
-});
-
 btnSave.addEventListener('click', async () => {
   if (btnSave.disabled) return;
   btnSave.disabled = true;
@@ -790,7 +704,6 @@ function openSettingsPanel() {
   spPanel.classList.remove('closing');
   spBackdrop.classList.add('open');
   spPanel.classList.add('open');
-  refreshPanelLicense();
   spAppVersion.textContent = appVersion.textContent || '—';
   setSettingsPage('general');
   refreshGeneralPanel();
@@ -826,42 +739,6 @@ window.addEventListener('keydown', (e) => {
     closeSettingsPanel();
   }
 });
-
-async function refreshPanelLicense() {
-  try {
-    const lic = await window.deskoy.getLicenseState();
-    spLicStatus.classList.remove('valid', 'invalid');
-    spLicBadge.classList.remove('valid', 'invalid');
-    if (lic.status === 'valid') {
-      spLicStatus.textContent = 'Licensed';
-      spLicStatus.classList.add('valid');
-      spLicBadge.classList.add('valid');
-      const k = lic.key;
-      const masked = k.length > 10
-        ? k.slice(0, 6) + '••••' + k.slice(-4)
-        : k;
-      spLicKey.textContent = masked;
-    } else if (lic.status === 'invalid') {
-      spLicStatus.textContent = 'Invalid License';
-      spLicStatus.classList.add('invalid');
-      spLicBadge.classList.add('invalid');
-      const reason = lic.reason ?? '';
-      spLicKey.textContent = reason;
-    } else {
-      spLicStatus.textContent = 'Not activated';
-      spLicKey.textContent = 'Enter a license key to activate';
-    }
-  } catch {
-    spLicStatus.textContent = 'Unknown';
-    spLicKey.textContent = '';
-  }
-}
-
-spManageLicense.addEventListener('click', () => {
-  closeSettingsPanel();
-  setTimeout(() => licenseOverlay.classList.add('show'), 280);
-});
-spLicenseLicensing.addEventListener('click', () => void window.deskoy.openExternal(LICENSING_DOCS_URL));
 
 /* Theme switching */
 function resolveTheme(pref: 'dark' | 'light' | 'system'): 'dark' | 'light' {
@@ -1080,13 +957,12 @@ function openDeskoyStatusPage() {
 spAboutStatus.addEventListener('click', openDeskoyStatusPage);
 spStatusPageGeneral.addEventListener('click', openDeskoyStatusPage);
 
-type SettingsPage = 'general' | 'appearance' | 'license' | 'feedback' | 'bug' | 'updates' | 'about';
+type SettingsPage = 'general' | 'appearance' | 'feedback' | 'bug' | 'updates' | 'about';
 
 function setSettingsPage(page: SettingsPage) {
   const nav: Array<[HTMLButtonElement, SettingsPage]> = [
     [spNavGeneral, 'general'],
     [spNavAppearance, 'appearance'],
-    [spNavLicense, 'license'],
     [spNavFeedback, 'feedback'],
     [spNavBug, 'bug'],
     [spNavUpdates, 'updates'],
@@ -1097,7 +973,6 @@ function setSettingsPage(page: SettingsPage) {
   const pages: Array<[HTMLElement, SettingsPage]> = [
     [spPageGeneral, 'general'],
     [spPageAppearance, 'appearance'],
-    [spPageLicense, 'license'],
     [spPageFeedback, 'feedback'],
     [spPageBug, 'bug'],
     [spPageUpdates, 'updates'],
@@ -1108,7 +983,6 @@ function setSettingsPage(page: SettingsPage) {
   const titleMap: Record<SettingsPage, string> = {
     general: 'Settings',
     appearance: 'Appearance',
-    license: 'License',
     feedback: 'Feedback',
     bug: 'Bug Report',
     updates: 'Updates',
@@ -1116,7 +990,6 @@ function setSettingsPage(page: SettingsPage) {
   };
   spHeaderTitle.textContent = titleMap[page];
 
-  if (page === 'license') refreshPanelLicense();
   if (page === 'general') refreshGeneralPanel();
   if (page === 'updates') void refreshUpdatesPanel();
 }
@@ -1126,7 +999,6 @@ function bindNav(btn: HTMLButtonElement, page: SettingsPage) {
 }
 bindNav(spNavGeneral, 'general');
 bindNav(spNavAppearance, 'appearance');
-bindNav(spNavLicense, 'license');
 bindNav(spNavFeedback, 'feedback');
 bindNav(spNavBug, 'bug');
 bindNav(spNavUpdates, 'updates');

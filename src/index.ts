@@ -9,7 +9,7 @@ import {
   nativeImage,
   shell,
 } from 'electron';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 import { execFile } from 'child_process';
@@ -24,20 +24,10 @@ declare const COVER_VSCODE_WEBPACK_ENTRY: string;
 declare const COVER_DOCS_WEBPACK_ENTRY: string;
 declare const COVER_JIRA_WEBPACK_ENTRY: string;
 declare const COVER_BI_WEBPACK_ENTRY: string;
-/** Injected at `npm run make` / `package` from env (see webpack.plugins.ts). */
-declare const __DESKOY_BUILD_FEEDBACK_WEBHOOK__: string;
-declare const __DESKOY_BUILD_BUG_WEBHOOK__: string;
 
-/** Hardcoded until a server-side license API exists. Only this key is accepted (dev + packaged). */
-const BUILTIN_LICENSE_KEY = '2345r';
-
-function isBuiltinLicenseKey(key: string): boolean {
-  return key.trim() === BUILTIN_LICENSE_KEY;
-}
-
-// Load `.env` / `.env.local` before reading Discord webhook env vars.
+// Load `.env` / `.env.local` early (relay URLs, feature flags, etc).
 // Packaged apps are often started with cwd = System32 or the install folder; include userData,
-// resources, and the folder containing the .exe so webhooks still resolve after NSIS install.
+// resources, and the folder containing the .exe so env files still resolve after NSIS install.
 try {
   const roots: string[] = [];
   try {
@@ -68,82 +58,6 @@ try {
   }
 } catch {
   // ignore
-}
-
-// Discord webhooks — resolved lazily (env after dotenv, optional JSON file, then build-time constants).
-// Env vars: DESKOY_DISCORD_FEEDBACK_WEBHOOK_URL or DESKOY_FEEDBACK_WEBHOOK_URL (and *_BUG_*).
-// File: deskoy-webhooks.json with { "feedback": "https://discord.com/api/webhooks/...", "bug": "..." }
-// in userData, resources, exe directory, or repo cwd (see readDeskoyWebhooksJson).
-let discordFeedbackWebhookResolved = '';
-let discordBugWebhookResolved = '';
-let discordWebhooksResolved = false;
-
-function readDeskoyWebhooksJson(): { feedback: string; bug: string } {
-  const dirs: string[] = [];
-  try {
-    if (app.isPackaged) {
-      dirs.push(app.getPath('userData'));
-      if (process.resourcesPath) dirs.push(process.resourcesPath);
-      dirs.push(path.dirname(process.execPath));
-    }
-  } catch {
-    // ignore
-  }
-  dirs.push(
-    process.cwd(),
-    path.resolve(__dirname, '..'),
-    path.resolve(__dirname, '..', '..'),
-  );
-  const seen = new Set<string>();
-  for (const dir of dirs) {
-    const p = path.join(dir, 'deskoy-webhooks.json');
-    if (seen.has(p)) continue;
-    seen.add(p);
-    try {
-      if (!existsSync(p)) continue;
-      const j = JSON.parse(readFileSync(p, 'utf8')) as { feedback?: unknown; bug?: unknown };
-      return {
-        feedback: String(j.feedback ?? '').trim(),
-        bug: String(j.bug ?? '').trim(),
-      };
-    } catch {
-      // try next location
-    }
-  }
-  return { feedback: '', bug: '' };
-}
-
-function resolveDiscordWebhooks(): void {
-  if (discordWebhooksResolved) return;
-  discordWebhooksResolved = true;
-
-  const envFeedback =
-    process.env.DESKOY_DISCORD_FEEDBACK_WEBHOOK_URL?.trim() ||
-    process.env.DESKOY_FEEDBACK_WEBHOOK_URL?.trim() ||
-    '';
-  const envBug =
-    process.env.DESKOY_DISCORD_BUG_WEBHOOK_URL?.trim() ||
-    process.env.DESKOY_BUG_WEBHOOK_URL?.trim() ||
-    '';
-
-  const file = readDeskoyWebhooksJson();
-
-  const buildFeedback =
-    typeof __DESKOY_BUILD_FEEDBACK_WEBHOOK__ === 'string' ? __DESKOY_BUILD_FEEDBACK_WEBHOOK__.trim() : '';
-  const buildBug = typeof __DESKOY_BUILD_BUG_WEBHOOK__ === 'string' ? __DESKOY_BUILD_BUG_WEBHOOK__.trim() : '';
-
-  discordFeedbackWebhookResolved = envFeedback || file.feedback || buildFeedback;
-  discordBugWebhookResolved = envBug || file.bug || buildBug;
-}
-
-function getDiscordFeedbackWebhook(): string {
-  resolveDiscordWebhooks();
-  return discordFeedbackWebhookResolved;
-}
-
-function getDiscordBugWebhook(): string {
-  resolveDiscordWebhooks();
-  return discordBugWebhookResolved;
 }
 
 // Production relay (server holds Discord webhook secrets). Default: api subdomain on deskoy.com.
@@ -210,16 +124,6 @@ type DeskoySettings = {
   blockedTitleKeywords: string[];
   theme: 'dark' | 'light' | 'system';
 };
-
-type StoredLicense = {
-  key: string;
-  lastValidated: number;
-};
-
-type LicenseValidity =
-  | { status: 'missing' }
-  | { status: 'valid'; key: string; lastValidated: number }
-  | { status: 'invalid'; reason?: string };
 
 // electron-store's exported types vary by version; keep runtime strong, typing flexible.
 const store = new Store() as any;
@@ -416,43 +320,6 @@ function setSettings(patch: Partial<DeskoySettings>) {
   return next;
 }
 
-let licenseCache: { at: number; value: LicenseValidity } | null = null;
-const LICENSE_CACHE_TTL_MS = 15_000;
-
-/** Stored activation key for relay / Discord (truncated). Omitted when not activated. */
-function getStoredLicenseKeyForReport(): string | undefined {
-  const stored = store.get('license') as StoredLicense | undefined;
-  const k = typeof stored?.key === 'string' ? stored.key.trim() : '';
-  if (!k) return undefined;
-  return k.length > 256 ? k.slice(0, 256) : k;
-}
-
-async function getLicenseValidity(): Promise<LicenseValidity> {
-  const cached = licenseCache;
-  if (cached && Date.now() - cached.at < LICENSE_CACHE_TTL_MS) return cached.value;
-
-  const stored = store.get('license') as StoredLicense | undefined;
-  if (!stored?.key) {
-    const v: LicenseValidity = { status: 'missing' };
-    licenseCache = { at: Date.now(), value: v };
-    return v;
-  }
-
-  if (isBuiltinLicenseKey(stored.key)) {
-    const v: LicenseValidity = {
-      status: 'valid',
-      key: BUILTIN_LICENSE_KEY,
-      lastValidated: stored.lastValidated,
-    };
-    licenseCache = { at: Date.now(), value: v };
-    return v;
-  }
-
-  const v: LicenseValidity = { status: 'invalid', reason: 'Invalid license key' };
-  licenseCache = { at: Date.now(), value: v };
-  return v;
-}
-
 let tray: Tray | null = null;
 /** When true, the settings window may close for real (tray Quit / app.quit). Otherwise close only hides. */
 let isQuitting = false;
@@ -500,7 +367,12 @@ function clearBlockedCoverPollTimer() {
 
 function loadAppIconPng() {
   const candidates = app.isPackaged
-    ? [path.join(process.resourcesPath, 'icon.png')]
+    ? [
+        // We ship the full `assets/` folder as an extra resource.
+        // Some Electron surfaces prefer a direct PNG path for the window icon.
+        path.join(process.resourcesPath, 'icon.png'),
+        path.join(process.resourcesPath, 'assets', 'icon.png'),
+      ]
     : [
         path.join(process.cwd(), 'assets', 'icon.png'),
         path.join(app.getAppPath(), 'assets', 'icon.png'),
@@ -813,11 +685,6 @@ async function closeCoverSession(): Promise<void> {
 
 async function toggleCoverViaHotkey(): Promise<void> {
   if (!getSettings().enabled) return;
-  const lic = await getLicenseValidity();
-  if (lic.status !== 'valid') {
-    createSettingsWindow(true);
-    return;
-  }
 
   if (!coverOpen) {
     const s = getSettings();
@@ -904,8 +771,6 @@ async function openCoverIfAllowed(
   const s = getSettings();
   if (!s.enabled) return;
   if (coverOpen || coverBusy) return;
-  const lic = await getLicenseValidity();
-  if (lic.status !== 'valid') return;
   // Debounce repeated triggers.
   const now = Date.now();
   if (now - lastBlockedCoverAt < BLOCKED_COVER_COOLDOWN_MS) return;
@@ -1026,14 +891,6 @@ async function toggleDeskoyArmed(): Promise<{
   const cur = prev.enabled;
   const next = !cur;
 
-  if (next) {
-    const lic = await getLicenseValidity();
-    if (lic.status !== 'valid') {
-      createSettingsWindow(true);
-      return { ok: false, active: false, error: 'license_required' };
-    }
-  }
-
   if (!next && coverOpen) {
     await closeCoverSession();
   }
@@ -1060,8 +917,6 @@ async function registerHotkeys(settings: DeskoySettings): Promise<boolean> {
     registeredHotkey = null;
   }
   if (!settings.enabled) return true;
-  const lic = await getLicenseValidity();
-  if (lic.status !== 'valid') return true;
   const combo = (settings.hotkey ?? '').trim();
   if (!combo) return true;
   const ok = globalShortcut.register(combo, () => void toggleCoverViaHotkey());
@@ -1214,8 +1069,6 @@ function startAutoCoverWatcher() {
         lastBlockedPid = 0;
         lastBlockedProcessName = '';
       }
-      const lic = await getLicenseValidity();
-      if (lic.status !== 'valid') return;
       const info = await getActiveWindowInfo();
       if (!info) return;
       if (isDeskoyWindow(info)) return;
@@ -1236,23 +1089,17 @@ function stopAutoCoverWatcher() {
 }
 
 app.on('ready', () => {
-  // Demo-only behavior: always show license flow on restart.
-  // Production builds keep the stored license/session.
-  if (!app.isPackaged) {
-    store.delete('license');
-  }
-
   createTray();
   void (async () => {
     const freshInstall = await consumeFreshInstallMarker();
     if (freshInstall) {
       // NSIS drops this marker only on a true new install — wipe local store so no dev/repack
-      // machine state or stale userData leaks in; user enters license on first run.
+      // machine state or stale userData leaks in.
       store.clear();
-      licenseCache = null;
     }
-    const lic = await getLicenseValidity();
-    const shouldShowOnLaunch = freshInstall || lic.status !== 'valid';
+    // In development (`npm start`) show the Settings window immediately.
+    // In packaged builds, remain tray-first except on true fresh installs.
+    const shouldShowOnLaunch = !app.isPackaged || freshInstall;
     createSettingsWindow(shouldShowOnLaunch);
     // If we ever need to force-upgrade/discontinue a build, do it here (fail-open).
     await checkVersionPolicyFailOpen();
@@ -1360,8 +1207,6 @@ ipcMain.handle('deskoy:saveSettings', async (_evt, patch: Partial<DeskoySettings
     const prev = getSettings();
     if (patch.enabled) {
       if (upgradeBlock) return { ok: false, error: 'upgrade_required' };
-      const lic = await getLicenseValidity();
-      if (lic.status !== 'valid') return { ok: false, error: 'license_required' };
     }
     const next = setSettings(patch);
     const ok = await registerHotkeys(next);
@@ -1377,89 +1222,6 @@ ipcMain.handle('deskoy:saveSettings', async (_evt, patch: Partial<DeskoySettings
     return { ok: false, error: e instanceof Error ? e.message : 'unknown_error' };
   }
 });
-
-function normalizeWebhookUrl(raw: unknown): string {
-  const s = typeof raw === 'string' ? raw.trim() : '';
-  if (!s) return '';
-  try {
-    const u = new URL(s);
-    if (u.protocol !== 'https:') return '';
-    // Ensure it's an *execute webhook* URL, not the "get webhook" endpoint.
-    // Required shape: https://discord.com/api/webhooks/<id>/<token>
-    const hostOk =
-      u.hostname === 'discord.com' || u.hostname === 'canary.discord.com' || u.hostname === 'ptb.discord.com';
-    if (!hostOk) return '';
-    const parts = u.pathname.split('/').filter(Boolean); // ["api","webhooks","<id>","<token>"]
-    if (parts.length < 4) return '';
-    if (parts[0] !== 'api' || parts[1] !== 'webhooks') return '';
-    if (!/^\d+$/.test(parts[2] ?? '')) return '';
-    if (!(parts[3] ?? '').length) return '';
-    return u.toString();
-  } catch {
-    return '';
-  }
-}
-
-function decodeDataUrlImage(dataUrl: string): { mime: string; buffer: Buffer } | null {
-  const m = dataUrl.match(/^data:([^;]+);base64,([\s\S]+)$/);
-  if (!m) return null;
-  const mime = m[1].trim().toLowerCase();
-  const b64 = m[2].trim();
-  if (!mime.startsWith('image/')) return null;
-  try {
-    const buffer = Buffer.from(b64, 'base64');
-    if (!buffer.length) return null;
-    return { mime, buffer };
-  } catch {
-    return null;
-  }
-}
-
-async function postDiscordWebhook(args: {
-  webhookUrl: string;
-  username: string;
-  content: string;
-  file?: { filename: string; mime: string; buffer: Buffer };
-}): Promise<{ ok: boolean; error?: string }> {
-  const webhookUrl = normalizeWebhookUrl(args.webhookUrl);
-  if (!webhookUrl) return { ok: false, error: 'missing_webhook' };
-  const payload = { username: args.username, content: args.content };
-  try {
-    if (args.file) {
-      const FormDataCtor = (globalThis as any).FormData as (new () => FormData) | undefined;
-      const BlobCtor = (globalThis as any).Blob as (new (parts?: unknown[], opts?: { type?: string }) => Blob) | undefined;
-      if (!FormDataCtor || !BlobCtor) return { ok: false, error: 'formdata_unavailable' };
-
-      const form = new FormDataCtor();
-      form.set('payload_json', JSON.stringify(payload));
-      // IMPORTANT: use the runtime's global Blob (undici/web) for FormData compatibility.
-      const blob = new BlobCtor([args.file.buffer], { type: args.file.mime });
-      form.set('files[0]', blob, args.file.filename);
-      const resp = await fetch(webhookUrl, { method: 'POST', body: form });
-      if (!resp.ok) {
-        return {
-          ok: false,
-          error: `discord_http_${resp.status}`,
-        };
-      }
-      return { ok: true };
-    }
-    const resp = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!resp.ok) {
-      return {
-        ok: false,
-        error: `discord_http_${resp.status}`,
-      };
-    }
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'network_error' };
-  }
-}
 
 async function postDeskoyRelay(args: {
   url: string;
@@ -1481,12 +1243,6 @@ async function postDeskoyRelay(args: {
   }
 }
 
-/** Packaged builds use the relay only unless DESKOY_ALLOW_DIRECT_WEBHOOK_FALLBACK=1. Unpackaged dev may fall back to env webhooks. */
-function allowDirectDiscordWebhookFallback(): boolean {
-  if (!app.isPackaged) return true;
-  return process.env.DESKOY_ALLOW_DIRECT_WEBHOOK_FALLBACK === '1';
-}
-
 ipcMain.handle(
   'deskoy:sendFeedback',
   async (_evt, payload: { message: string; email?: string; diagnostics?: unknown }) => {
@@ -1496,7 +1252,6 @@ ipcMain.handle(
     const email = (payload?.email ?? '').toString().trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'invalid_email' };
     const diagnostics = payload?.diagnostics;
-    const licenseKey = getStoredLicenseKeyForReport();
 
     const relayRes = await postDeskoyRelay({
       url: DESKOY_FEEDBACK_RELAY_URL,
@@ -1505,34 +1260,13 @@ ipcMain.handle(
         message,
         email: email || undefined,
         diagnostics,
-        licenseKey: licenseKey || undefined,
       },
     });
     if (relayRes.ok) {
       markSentRateLimit('feedback');
       return relayRes;
     }
-
-    if (!allowDirectDiscordWebhookFallback()) return relayRes;
-
-    const feedbackWebhook = getDiscordFeedbackWebhook();
-    if (!normalizeWebhookUrl(feedbackWebhook)) return relayRes;
-
-    const content =
-      `**New Feedback**\n` +
-      (licenseKey ? `**License:** \`${licenseKey}\`\n` : '**License:** *(none)*\n') +
-      (email ? `**Email:** ${email}\n` : '') +
-      `\n${message}\n` +
-      (diagnostics
-        ? `\n**Diagnostics**\n\`\`\`json\n${JSON.stringify(diagnostics, null, 2)}\n\`\`\`\n`
-        : '');
-    const res = await postDiscordWebhook({
-      webhookUrl: feedbackWebhook,
-      username: 'Deskoy Feedback',
-      content,
-    });
-    if (res.ok) markSentRateLimit('feedback');
-    return res;
+    return relayRes;
   },
 );
 
@@ -1549,7 +1283,6 @@ ipcMain.handle(
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'invalid_email' };
     const steps = (payload?.steps ?? '').toString().trim();
     const diagnostics = payload?.diagnostics;
-    const licenseKey = getStoredLicenseKeyForReport();
 
     const relayRes = await postDeskoyRelay({
       url: DESKOY_BUG_RELAY_URL,
@@ -1560,44 +1293,13 @@ ipcMain.handle(
         steps: steps || undefined,
         screenshot: payload?.screenshot || undefined,
         diagnostics,
-        licenseKey: licenseKey || undefined,
       },
     });
     if (relayRes.ok) {
       markSentRateLimit('bug');
       return relayRes;
     }
-
-    if (!allowDirectDiscordWebhookFallback()) return relayRes;
-
-    const bugWebhook = getDiscordBugWebhook();
-    if (!normalizeWebhookUrl(bugWebhook)) return relayRes;
-
-    const content =
-      `**New Bug Report**\n` +
-      (licenseKey ? `**License:** \`${licenseKey}\`\n` : '**License:** *(none)*\n') +
-      (email ? `**Email:** ${email}\n` : '') +
-      `\n**What happened**\n${message}\n` +
-      (steps ? `\n**Steps to reproduce**\n${steps}\n` : '') +
-      (diagnostics
-        ? `\n**Diagnostics**\n\`\`\`json\n${JSON.stringify(diagnostics, null, 2)}\n\`\`\`\n`
-        : '');
-
-    const file = payload?.screenshot ? decodeDataUrlImage(payload.screenshot) : null;
-    const res = await postDiscordWebhook({
-      webhookUrl: bugWebhook,
-      username: 'Deskoy Bug Report',
-      content,
-      file: file
-        ? {
-            filename: 'screenshot.png',
-            mime: file.mime,
-            buffer: file.buffer,
-          }
-        : undefined,
-    });
-    if (res.ok) markSentRateLimit('bug');
-    return res;
+    return relayRes;
   },
 );
 
@@ -1614,30 +1316,6 @@ ipcMain.handle('deskoy:pickCoverFile', async () => {
   const fp = res.filePaths[0];
   setSettings({ coverFilePath: fp, coverMode: 'file' });
   return { ok: true, path: fp };
-});
-
-ipcMain.handle('deskoy:getLicenseState', async () => {
-  const v = await getLicenseValidity();
-  return v;
-});
-
-ipcMain.handle('deskoy:validateLicense', async (_evt, key: string) => {
-  const trimmed = (key ?? '').trim();
-  if (!trimmed) return { ok: true, valid: false, reason: 'missing_key' };
-
-  if (isBuiltinLicenseKey(trimmed)) {
-    store.set('license', { key: BUILTIN_LICENSE_KEY, lastValidated: Date.now() });
-    licenseCache = null;
-    return { ok: true, valid: true };
-  }
-
-  return { ok: true, valid: false, reason: 'Invalid license key' };
-});
-
-ipcMain.handle('deskoy:clearLicense', async () => {
-  store.delete('license');
-  licenseCache = null;
-  return { ok: true };
 });
 
 ipcMain.handle('deskoy:windowMinimize', async () => {

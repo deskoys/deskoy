@@ -20,7 +20,26 @@ const OUT_SIZE = 256;
 /** ICO sizes Windows commonly uses (largest first is fine for png-to-ico). */
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256];
 
-const ICON_BG = { r: 255, g: 255, b: 255, alpha: 1 };
+// Transparent background, with a subtle glow for legibility on dark UI surfaces.
+const ICON_BG = { r: 0, g: 0, b: 0, alpha: 0 };
+
+function roundedMaskSvg(size, radius) {
+  const r = Math.max(0, Math.min(radius, Math.floor(size / 2)));
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <rect x="0" y="0" width="${size}" height="${size}" rx="${r}" ry="${r}" fill="#fff"/>
+</svg>`,
+    'utf8',
+  );
+}
+
+async function applyRoundedCornersPng(pngBuffer, size) {
+  // A modern rounded-square silhouette.
+  // Keep this subtle — curved corners, not a circle.
+  const radius = Math.round(size * 0.14);
+  const mask = roundedMaskSvg(size, radius);
+  return sharp(pngBuffer).composite([{ input: mask, blend: 'dest-in' }]).png().toBuffer();
+}
 
 function writePlaceholderLogo() {
   const w = 256;
@@ -58,8 +77,30 @@ async function trimPaddingIfSensible(inputPath) {
   return trimmed;
 }
 
+async function addSubtleGlow(pngBuffer) {
+  // Windows task switcher tiles can be dark; a faint glow keeps thin strokes visible
+  // without adding a solid background.
+  const glow = await sharp(pngBuffer)
+    .blur(10)
+    .tint({ r: 235, g: 246, b: 255 }) // cool white
+    .modulate({ brightness: 1.05 })
+    .png()
+    .toBuffer();
+
+  return sharp({
+    create: { width: OUT_SIZE, height: OUT_SIZE, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  })
+    .composite([
+      { input: glow, blend: 'over', opacity: 0.55 },
+      { input: pngBuffer, blend: 'over' },
+    ])
+    .png()
+    .toBuffer();
+}
+
 async function renderIconPng(trimmedOrRaw) {
-  return sharp(trimmedOrRaw)
+  const pngBuf = await sharp(trimmedOrRaw)
+    .ensureAlpha()
     .resize(OUT_SIZE, OUT_SIZE, {
       fit: 'contain',
       background: ICON_BG,
@@ -67,6 +108,8 @@ async function renderIconPng(trimmedOrRaw) {
     })
     .png()
     .toBuffer();
+  const withGlow = await addSubtleGlow(pngBuf);
+  return applyRoundedCornersPng(withGlow, OUT_SIZE);
 }
 
 (async () => {
@@ -83,13 +126,33 @@ async function renderIconPng(trimmedOrRaw) {
   const icoParts = await Promise.all(
     ICO_SIZES.map((s) =>
       sharp(trimmed)
+        .ensureAlpha()
         .resize(s, s, {
           fit: 'contain',
           background: ICON_BG,
           kernel: sharp.kernel.lanczos3,
         })
         .png()
-        .toBuffer(),
+        .toBuffer()
+        .then(async (buf) => {
+          // Match the PNG: faint glow, then rounded mask.
+          const glow = await sharp(buf)
+            .blur(Math.max(1, Math.round(s / 24)))
+            .tint({ r: 235, g: 246, b: 255 })
+            .modulate({ brightness: 1.05 })
+            .png()
+            .toBuffer();
+          const composed = await sharp({
+            create: { width: s, height: s, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+          })
+            .composite([
+              { input: glow, blend: 'over', opacity: 0.55 },
+              { input: buf, blend: 'over' },
+            ])
+            .png()
+            .toBuffer();
+          return applyRoundedCornersPng(composed, s);
+        }),
     ),
   );
   const icoBuf = await pngToIco(icoParts);

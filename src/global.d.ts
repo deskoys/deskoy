@@ -45,17 +45,6 @@ declare global {
         }>,
       ) => Promise<{ ok: boolean; error?: string }>;
       pickCoverFile: () => Promise<{ ok: boolean; path: string }>;
-      getLicenseState: () => Promise<
-        | { status: 'missing' }
-        | { status: 'valid'; key: string; lastValidated: number }
-        | { status: 'invalid'; reason?: string }
-      >;
-      validateLicense: (key: string) => Promise<{
-        ok: boolean;
-        valid: boolean;
-        reason?: string;
-      }>;
-      clearLicense: () => Promise<{ ok: boolean }>;
       sendFeedback: (payload: {
         message: string;
         email?: string;

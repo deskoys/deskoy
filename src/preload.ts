@@ -46,9 +46,6 @@ contextBridge.exposeInMainWorld('deskoy', {
   saveSettings: (settings: Partial<DeskoySettings>) =>
     ipcRenderer.invoke('deskoy:saveSettings', settings),
   pickCoverFile: () => ipcRenderer.invoke('deskoy:pickCoverFile'),
-  getLicenseState: () => ipcRenderer.invoke('deskoy:getLicenseState'),
-  validateLicense: (key: string) => ipcRenderer.invoke('deskoy:validateLicense', key),
-  clearLicense: () => ipcRenderer.invoke('deskoy:clearLicense'),
   sendFeedback: (payload: FeedbackPayload) => ipcRenderer.invoke('deskoy:sendFeedback', payload),
   sendBugReport: (payload: BugReportPayload) => ipcRenderer.invoke('deskoy:sendBugReport', payload),
   windowMinimize: () => ipcRenderer.invoke('deskoy:windowMinimize'),

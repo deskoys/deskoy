@@ -32,26 +32,32 @@ function svgSidebar() {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${SIDEBAR_W}" height="${SIDEBAR_H}" viewBox="0 0 ${SIDEBAR_W} ${SIDEBAR_H}">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0B1224"/>
-      <stop offset="60%" stop-color="#0A0F1E"/>
-      <stop offset="100%" stop-color="#070A13"/>
+      <stop offset="0%" stop-color="#0c1020"/>
+      <stop offset="58%" stop-color="#0a0d18"/>
+      <stop offset="100%" stop-color="#070812"/>
     </linearGradient>
-    <radialGradient id="glow" cx="30%" cy="18%" r="75%">
-      <stop offset="0%" stop-color="rgba(122,136,255,0.26)"/>
-      <stop offset="70%" stop-color="rgba(122,136,255,0.08)"/>
-      <stop offset="100%" stop-color="rgba(122,136,255,0)"/>
+    <radialGradient id="glowA" cx="30%" cy="18%" r="78%">
+      <stop offset="0%" stop-color="rgba(110,168,255,0.30)"/>
+      <stop offset="62%" stop-color="rgba(110,168,255,0.10)"/>
+      <stop offset="100%" stop-color="rgba(110,168,255,0)"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="85%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="rgba(168,210,255,0.18)"/>
+      <stop offset="75%" stop-color="rgba(168,210,255,0.06)"/>
+      <stop offset="100%" stop-color="rgba(168,210,255,0)"/>
     </radialGradient>
   </defs>
   <rect width="100%" height="100%" fill="url(#g)"/>
-  <rect width="100%" height="100%" fill="url(#glow)"/>
+  <rect width="100%" height="100%" fill="url(#glowA)"/>
+  <rect width="100%" height="100%" fill="url(#glowB)"/>
 
-  <!-- Crisp accent bars (better than tiny dots on scaled displays) -->
-  <rect x="0" y="0" width="6" height="${SIDEBAR_H}" fill="rgba(122,136,255,0.55)"/>
-  <rect x="6" y="0" width="1" height="${SIDEBAR_H}" fill="rgba(255,255,255,0.10)"/>
+  <!-- Subtle accent bar -->
+  <rect x="0" y="0" width="5" height="${SIDEBAR_H}" fill="rgba(110,168,255,0.48)"/>
+  <rect x="5" y="0" width="1" height="${SIDEBAR_H}" fill="rgba(255,255,255,0.10)"/>
   <rect x="0" y="${SIDEBAR_H - 84}" width="${SIDEBAR_W}" height="1" fill="rgba(255,255,255,0.10)"/>
 
   <text x="16" y="${SIDEBAR_H - 38}" font-family="Segoe UI, system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="rgba(255,255,255,0.78)">Deskoy</text>
-  <text x="16" y="${SIDEBAR_H - 20}" font-family="Segoe UI, system-ui, -apple-system, sans-serif" font-size="10.5" fill="rgba(255,255,255,0.44)">Privacy cover for work</text>
+  <text x="16" y="${SIDEBAR_H - 20}" font-family="Segoe UI, system-ui, -apple-system, sans-serif" font-size="10.5" fill="rgba(255,255,255,0.46)">Privacy cover for work</text>
 </svg>`,
     'utf8',
   );
@@ -62,18 +68,23 @@ function svgHeader() {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${HEADER_W}" height="${HEADER_H}" viewBox="0 0 ${HEADER_W} ${HEADER_H}">
   <defs>
     <linearGradient id="h" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#0B1224"/>
-      <stop offset="60%" stop-color="#0A0F1E"/>
-      <stop offset="100%" stop-color="#070A13"/>
+      <stop offset="0%" stop-color="#0c1020"/>
+      <stop offset="60%" stop-color="#0a0d18"/>
+      <stop offset="100%" stop-color="#070812"/>
     </linearGradient>
-    <radialGradient id="hg" cx="25%" cy="50%" r="70%">
-      <stop offset="0%" stop-color="rgba(122,136,255,0.22)"/>
-      <stop offset="100%" stop-color="rgba(120,138,255,0)"/>
+    <radialGradient id="hg1" cx="25%" cy="50%" r="78%">
+      <stop offset="0%" stop-color="rgba(110,168,255,0.20)"/>
+      <stop offset="100%" stop-color="rgba(110,168,255,0)"/>
+    </radialGradient>
+    <radialGradient id="hg2" cx="92%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="rgba(168,210,255,0.12)"/>
+      <stop offset="100%" stop-color="rgba(168,210,255,0)"/>
     </radialGradient>
   </defs>
   <rect width="100%" height="100%" fill="url(#h)"/>
-  <rect width="100%" height="100%" fill="url(#hg)"/>
-  <text x="12" y="34" font-family="Segoe UI, system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="rgba(255,255,255,0.85)">Deskoy</text>
+  <rect width="100%" height="100%" fill="url(#hg1)"/>
+  <rect width="100%" height="100%" fill="url(#hg2)"/>
+  <text x="12" y="34" font-family="Segoe UI, system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="rgba(255,255,255,0.88)">Deskoy</text>
 </svg>`,
     'utf8',
   );

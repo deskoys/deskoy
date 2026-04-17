@@ -57,7 +57,7 @@ typings/
 # Yarn Integrity file
 .yarn-integrity
 
-# Discord webhooks for packaged builds (copy from deskoy-webhooks.example.json)
+# App-local overrides (never commit)
 deskoy-webhooks.json
 
 # dotenv environment variables file

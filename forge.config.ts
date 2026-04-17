@@ -19,7 +19,9 @@ const nsisSidebarBmp = path.join(__dirname, 'assets', 'installer-sidebar.bmp');
 const nsisHeaderBmp = path.join(__dirname, 'assets', 'installer-header.bmp');
 const deskoyWebhooksJson = path.join(__dirname, 'deskoy-webhooks.json');
 
-const packagerExtraResources = [assetsIco, assetsPng];
+// Ship the whole assets folder so any new branding images
+// are present in production builds (e.g. tray/window icons, installer art).
+const packagerExtraResources = [path.join(__dirname, 'assets')];
 if (fs.existsSync(deskoyWebhooksJson)) {
   packagerExtraResources.push(deskoyWebhooksJson);
 }
