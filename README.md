@@ -2,7 +2,9 @@
 
 Deskoy is a Windows desktop **decoy utility**: press a hotkey and your screen is replaced by a believable “cover” window (Excel / VS Code / Google Docs / Jira Board / BI dashboard / blank), or an optional custom source (URL or local file).
 
-This repository is **source-available**: you may **view** the code and use Deskoy **personally and non-commercially** under the terms in [`LICENSE`](LICENSE). It is **not** OSI “open source” (sale and republication are restricted).
+See [`LICENSE`](LICENSE) for licensing information.
+
+Deskoy is **actively maintained**: we release updates on a regular cadence, respond to user feedback, and keep compatibility and documentation current where it matters for day-to-day use.
 
 ## Download
 
