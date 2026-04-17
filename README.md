@@ -27,7 +27,7 @@ Deskoy is a decoy tool for reducing casual exposure (e.g. shoulder-surfing or sc
 ## Codebase notes (for developers)
 
 - **App**: Electron + TypeScript (`src/`, `forge.config.ts`, webpack configs)
-- **Feedback / bug reports**: may use a separate server-side relay; see your deployment docs for env configuration.
+- **Feedback / bug reports**: use a separate server-side relay.
 
 ## Docs
 
