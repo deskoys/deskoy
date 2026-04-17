@@ -94,3 +94,6 @@ deskoy-webhooks.json
 
 # Electron-Forge
 out/
+
+# Server relay lives in its own repo / Vercel — do not publish from this app repo
+deskoy-relay/
