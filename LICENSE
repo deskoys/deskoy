@@ -1,21 +1,66 @@
-MIT License
+Deskoy Source-Available License
+Version 1.0 — 2026-04-17
 
-Copyright (c) 2026 Deskoy
+Copyright (c) 2026 Deskoy. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This is not an OSI “open source” license. The source is made available so you
+can read and understand it. Commercial sale and public republication are not
+permitted without written permission from the copyright holder.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Definitions
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+“Software” means the Deskoy source code, assets, and documentation in this
+repository (including any forks or copies derived from it).
+
+“You” means any person or entity that accesses the Software.
+
+2. What you may do
+
+(a) View and study the Software for personal, non-commercial purposes.
+
+(b) Download and run the Software on your own devices for personal,
+    non-commercial use.
+
+(c) Make private modifications for your own personal, non-commercial use,
+    provided you do not distribute those modifications to others.
+
+3. What you may not do (without prior written permission)
+
+You may not, in whole or in substantial part:
+
+(a) Sell, rent, lease, sublicense, or otherwise commercialize the Software or
+    any product or service whose primary value is derived from the Software.
+
+(b) Publish, redistribute, mirror, or otherwise make the Software (source or
+    binaries) available to third parties, including hosting a public fork,
+    uploading to package registries, or offering the Software “as a service”.
+
+(c) Remove or obscure copyright or license notices.
+
+4. Trademarks
+
+This license does not grant any rights to use the Deskoy name, logo, or other
+trademarks.
+
+5. Third-party components
+
+The Software may include third-party libraries under their own licenses. Those
+components remain under their respective licenses; this license applies to
+Deskoy’s own work as distributed here.
+
+6. Disclaimer of warranty
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+7. Limitation of liability
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
+
+8. Termination
+
+Any breach of this license terminates the rights granted in Section 2.
