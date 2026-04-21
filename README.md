@@ -1,5 +1,8 @@
-# Deskoy
+## Deskoy
 
+<img width="895" height="593" alt="2026-04-21 16_13_20-Greenshot" src="https://github.com/user-attachments/assets/22be2308-20bf-4eff-bfb7-4c64ac72596d" />
+
+---
 Deskoy is a Windows desktop **decoy utility**: press a hotkey and your screen is replaced by a believable “cover” window (Excel / VS Code / Google Docs / Jira Board / BI dashboard / blank), or an optional custom source (URL or local file).
 
 See [`LICENSE`](LICENSE) for licensing information.
